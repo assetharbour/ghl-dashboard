@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-green: #6da544;
+  --dark-navy: #2e3a48;
+  --accent-pink: #e91e63;
+  --bg-page: #f7f9fb;
+  --bg-card: #ffffff;
+  --border: #e5eaf0;
+  --text-primary: #1f2937;
+  --text-muted: #6b7280;
+}
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+@layer components {
+  .card {
+    @apply bg-card rounded-xl border border-line shadow-sm;
+  }
+  .kpi-value {
+    @apply text-[28px] font-semibold leading-tight text-ink;
+  }
+  .kpi-label {
+    @apply text-[13px] text-muted;
+  }
+  .page-title {
+    @apply text-2xl font-semibold text-ink;
+  }
+}
