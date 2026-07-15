@@ -5,10 +5,20 @@ import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
-import { fmtInt, fmtPct, fmtDate, DASH } from '../lib/format'
+import { fmtInt, fmtPct, fmtDate, fmtCurrency, isBlank, DASH } from '../lib/format'
 import { countBy, inCurrentMonth } from '../lib/metrics'
 
 const MIN_LEADS_FOR_CONVERSION = 3
+
+// Revenue = total_revenue summed across leads, but only counted as "has
+// data" if at least one underlying case actually recorded a fee — an
+// introducer/negotiator with zero recorded cases shows "—", never "£0",
+// so an unconfirmed revenue reads differently from a genuinely-zero one.
+function revenueStats(leads) {
+  const recorded = leads.filter((r) => !isBlank(r.total_revenue))
+  const sum = recorded.reduce((acc, r) => acc + Number(r.total_revenue), 0)
+  return { hasData: recorded.length > 0, sum, recordedCount: recorded.length }
+}
 
 export default function Introducers() {
   const { rows, loading, openDrilldown } = useData()
@@ -26,7 +36,7 @@ export default function Introducers() {
         const won = leads.filter((r) => r.case_status === 'won').length
         const lost = leads.filter((r) => r.case_status === 'lost').length
         const open = leads.filter((r) => r.case_status === 'open').length
-        return { source, leads, count: leads.length, won, lost, open, conv: won / leads.length }
+        return { source, leads, count: leads.length, won, lost, open, conv: won / leads.length, revenue: revenueStats(leads) }
       })
       .sort((a, b) => b.count - a.count)
 
@@ -37,7 +47,10 @@ export default function Introducers() {
         .sort((a, b) => b.conv - a.conv)[0] || null
     const thisMonth = named.filter((r) => inCurrentMonth(r.created_date))
 
-    return { stats, top, bestConv, thisMonth, totalIntroducers: stats.length }
+    const totalRevenue = revenueStats(rows)
+    const revenuePopPct = rows.length ? (100 * rows.filter((r) => !isBlank(r.total_revenue)).length) / rows.length : 0
+
+    return { stats, top, bestConv, thisMonth, totalIntroducers: stats.length, totalRevenue, revenuePopPct }
   }, [rows])
 
   const drillIntroducer = (s) =>
@@ -51,7 +64,7 @@ export default function Introducers() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
         <KPICard label="Total Introducers" value={fmtInt(m.totalIntroducers)} sub="distinct lead sources" />
         <KPICard
           label="Top Introducer"
@@ -73,6 +86,11 @@ export default function Introducers() {
               { key: 'created_date', label: 'Created', render: (r) => fmtDate(r.created_date) },
             ])
           }
+        />
+        <KPICard
+          label="Total Revenue"
+          value={m.totalRevenue.hasData ? fmtCurrency(m.totalRevenue.sum) : DASH}
+          sub={`${fmtInt(m.totalRevenue.recordedCount)} of ${fmtInt(rows.length)} cases recorded`}
         />
       </div>
 
@@ -119,9 +137,13 @@ export default function Introducers() {
                 {m.stats.map((s) => {
                   const isOpen = expanded === s.source
                   const byNegotiator = isOpen
-                    ? [...countBy(s.leads, (r) => r.negotiator || '(No negotiator)').entries()].sort(
-                        (a, b) => b[1] - a[1]
-                      )
+                    ? [...countBy(s.leads, (r) => r.negotiator || '(No negotiator)').entries()]
+                        .map(([neg, count]) => ({
+                          neg,
+                          count,
+                          revenue: revenueStats(s.leads.filter((r) => (r.negotiator || '(No negotiator)') === neg)),
+                        }))
+                        .sort((a, b) => b.count - a.count)
                     : []
                   const byAdvisor = isOpen
                     ? [...countBy(s.leads, (r) => r.advisor_name || '(No advisor assigned)').entries()].sort(
@@ -149,7 +171,9 @@ export default function Introducers() {
                       <td className="px-3 py-2.5 text-right">{fmtInt(s.lost)}</td>
                       <td className="px-3 py-2.5 text-right">{fmtInt(s.open)}</td>
                       <td className="px-3 py-2.5 text-right">{fmtPct(s.won, s.count)}</td>
-                      <td className="px-3 py-2.5 text-right text-muted">{DASH}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        {s.revenue.hasData ? fmtCurrency(s.revenue.sum) : <span className="text-muted">{DASH}</span>}
+                      </td>
                     </tr>,
                     isOpen && (
                       <tr key={s.source + '__detail'} className="bg-page/50">
@@ -157,11 +181,14 @@ export default function Introducers() {
                           <div className="grid sm:grid-cols-2 gap-6">
                             <div className="pl-6 space-y-1.5">
                               <p className="text-xs font-medium text-muted mb-2">By negotiator</p>
-                              {byNegotiator.map(([neg, count]) => (
+                              {byNegotiator.map(({ neg, count, revenue }) => (
                                 <div key={neg} className="flex items-center gap-3 text-xs">
                                   <span className="text-ink">{neg}</span>
                                   <span className="flex-1 border-b border-dotted border-line" />
                                   <span className="text-muted">{fmtInt(count)} lead{count > 1 ? 's' : ''}</span>
+                                  <span className="text-muted w-20 text-right">
+                                    {revenue.hasData ? fmtCurrency(revenue.sum) : DASH}
+                                  </span>
                                 </div>
                               ))}
                             </div>
@@ -191,7 +218,10 @@ export default function Introducers() {
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted mt-3">Revenue tracking pending field confirmation</p>
+          <p className="text-[11px] text-muted mt-3">
+            Revenue shown only reflects cases where fee fields have been recorded — {m.revenuePopPct.toFixed(1)}% of
+            cases currently have this data.
+          </p>
         </div>
       )}
     </div>

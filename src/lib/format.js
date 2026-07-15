@@ -31,6 +31,16 @@ export function fmtDays(v) {
   return Number(v).toFixed(1)
 }
 
+// £ + thousands separator. Whole-pound amounts show no decimals (the
+// common case for these fee fields); only amounts with actual pence show
+// 2 decimals, so typical entries don't get a noisy ".00" suffix.
+export function fmtCurrency(v) {
+  if (isBlank(v) || !Number.isFinite(Number(v))) return DASH
+  const n = Number(v)
+  const decimals = Number.isInteger(n) ? 0 : 2
+  return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
 export function parseDate(s) {
   if (isBlank(s)) return null
   const d = new Date(s)
