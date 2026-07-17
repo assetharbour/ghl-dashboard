@@ -1,4 +1,4 @@
-import { num, parseDate, parseBool, isBlank } from './format'
+import { num, parseDate, parseBool, isBlank, daysBetween } from './format'
 
 // Pipeline stages in actual funnel order — never sort these alphabetically
 export const STAGE_ORDER = [
@@ -132,6 +132,26 @@ export function avgDaysToCompletion(rows) {
   const vals = rows
     .filter((r) => !isBlank(r.avg_days_to_completion) && Number.isFinite(Number(r.avg_days_to_completion)))
     .map((r) => Number(r.avg_days_to_completion))
+  return mean(vals)
+}
+
+// Advisor Performance's "Avg Days to Completion" — opportunity created_date
+// to completion_date, computed per row and averaged (rows missing either
+// date are excluded, not counted as 0). Only counts rows that have actually
+// reached the "Completion" pipeline stage — a case with both dates set but
+// still sitting at an earlier stage (e.g. a pre-filled target date) doesn't
+// count as completed yet. Distinct from avgDaysToCompletion above, which
+// reads the Sheet's pre-computed avg_days_to_completion column
+// (first_contact_time → completion_time) used on the Overview page.
+export function avgDaysCreatedToCompletion(rows) {
+  const vals = rows
+    .filter((r) => r.pipeline_stage === 'Completion')
+    .map((r) => {
+      const created = parseDate(r.created_date)
+      const completion = parseDate(r.completion_date)
+      return created && completion ? daysBetween(created, completion) : null
+    })
+    .filter((v) => v !== null)
   return mean(vals)
 }
 
