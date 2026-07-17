@@ -202,7 +202,13 @@ export default function DataTable({
           <tbody>
             {pageRows.map((r, i) => (
               <tr
-                key={r.opportunity_id || r.__key || i}
+                // contact_id/opportunity_id are not always unique on their own — the
+                // Sheet has a handful of duplicate contact_id rows, and at least one
+                // pair of duplicate GHL contacts sharing a single opportunity_id.
+                // Appending the page-local index guarantees a collision-free key so
+                // React never bleeds a stale row's DOM into a differently-filtered
+                // table (e.g. switching between Case Management queues).
+                key={`${r.contact_id ?? r.opportunity_id ?? r.__key ?? ''}-${i}`}
                 onClick={onRowClick ? () => onRowClick(r) : undefined}
                 className={`border-t border-line/70 ${
                   onRowClick ? 'cursor-pointer hover:bg-page/70' : 'hover:bg-page/40'

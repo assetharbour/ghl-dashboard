@@ -83,6 +83,26 @@ export function isOnHold(row) {
   return !isBlank(row.pause_automations)
 }
 
+// Proxy for "Awaiting Client Response" — no literal GHL field, tag, or task
+// matches this concept. The task's own suggested proxy
+// (docs_status=='Partial' AND docs_chase_attempt_count>=1) yields zero live
+// matches: docs_status never actually contains 'Partial' in practice (only
+// 'Pending'/'Complete' appear) and docs_chase_attempt_count is 0% populated.
+// This adjusted, empirically-viable proxy is a best-effort stand-in, not a
+// confirmed "awaiting client" status.
+export function isAwaitingClientResponse(row) {
+  return String(row.docs_status).trim().toLowerCase() === 'pending' && row.case_status === 'open'
+}
+
+// Live property_status values are lower-cased-second-word ("Owner
+// occupied" / "Buy-to-let"), unlike how the client described them
+// ("Owner Occupied" / "Buy-to-Let") — matched case-insensitively here.
+// "Both" has never appeared live but is matched in case it starts being used.
+export function isFindingPropertyCase(row) {
+  const v = String(row.property_status).trim().toLowerCase()
+  return (v === 'buy-to-let' || v === 'both') && row.case_status === 'open'
+}
+
 // case_status = open AND older than 30 days AND still in the first 3 stages
 export function isStuck(row, now = new Date()) {
   if (row.case_status !== 'open') return false

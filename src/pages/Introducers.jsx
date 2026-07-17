@@ -20,6 +20,44 @@ function revenueStats(leads) {
   return { hasData: recorded.length > 0, sum, recordedCount: recorded.length }
 }
 
+// Composite Performance score — weighted blend of volume, conversion rate,
+// and revenue, each normalised 0-1 against the best introducer in the
+// current dataset for that dimension:
+//   score = (0.40 × volume) + (0.35 × conversion) + (0.25 × revenue)
+// Conversion is dropped from the blend below MIN_LEADS_FOR_CONVERSION (too
+// noisy on tiny samples, same threshold as "Best Conversion Rate" above).
+// Revenue is dropped when the introducer has zero recorded-fee cases
+// (unmeasured, not zero — see revenueStats). Weights are re-normalised
+// across whichever components remain, so an introducer missing revenue
+// data isn't penalised for it. Tiers: High >= 0.66, Medium >= 0.33, else Low.
+const PERFORMANCE_WEIGHTS = { volume: 0.4, conversion: 0.35, revenue: 0.25 }
+
+function performanceScore(s, maxCount, maxRevenue) {
+  const components = [{ weight: PERFORMANCE_WEIGHTS.volume, value: maxCount ? s.count / maxCount : 0 }]
+  if (s.count >= MIN_LEADS_FOR_CONVERSION) {
+    components.push({ weight: PERFORMANCE_WEIGHTS.conversion, value: s.conv })
+  }
+  if (s.revenue.hasData && maxRevenue > 0) {
+    components.push({ weight: PERFORMANCE_WEIGHTS.revenue, value: s.revenue.sum / maxRevenue })
+  }
+  const totalWeight = components.reduce((sum, c) => sum + c.weight, 0)
+  if (!totalWeight) return { score: null, tier: null }
+  const score = components.reduce((sum, c) => sum + c.weight * c.value, 0) / totalWeight
+  const tier = score >= 0.66 ? 'High' : score >= 0.33 ? 'Medium' : 'Low'
+  return { score, tier }
+}
+
+function PerformanceBadge({ tier }) {
+  if (!tier) return <span className="text-muted">{DASH}</span>
+  const cls =
+    tier === 'High'
+      ? 'bg-brand-green/10 text-brand-green'
+      : tier === 'Medium'
+        ? 'bg-amber-100 text-amber-700'
+        : 'bg-brand-pink/10 text-brand-pink'
+  return <span className={`inline-block text-xs font-medium rounded-full px-2.5 py-0.5 ${cls}`}>{tier}</span>
+}
+
 export default function Introducers() {
   const { rows, loading, openDrilldown } = useData()
   const [expanded, setExpanded] = useState(null)
@@ -31,7 +69,7 @@ export default function Introducers() {
       if (!bySource.has(r.lead_source)) bySource.set(r.lead_source, [])
       bySource.get(r.lead_source).push(r)
     }
-    const stats = [...bySource.entries()]
+    const statsBase = [...bySource.entries()]
       .map(([source, leads]) => {
         const won = leads.filter((r) => r.case_status === 'won').length
         const lost = leads.filter((r) => r.case_status === 'lost').length
@@ -39,6 +77,11 @@ export default function Introducers() {
         return { source, leads, count: leads.length, won, lost, open, conv: won / leads.length, revenue: revenueStats(leads) }
       })
       .sort((a, b) => b.count - a.count)
+
+    const maxCount = statsBase.length ? Math.max(...statsBase.map((s) => s.count)) : 0
+    const revenueSums = statsBase.filter((s) => s.revenue.hasData).map((s) => s.revenue.sum)
+    const maxRevenue = revenueSums.length ? Math.max(...revenueSums) : 0
+    const stats = statsBase.map((s) => ({ ...s, performance: performanceScore(s, maxCount, maxRevenue) }))
 
     const top = stats[0] || null
     const bestConv =
@@ -98,7 +141,19 @@ export default function Introducers() {
         <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 24 }}>
             <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
-            <YAxis type="category" dataKey="name" width={190} tick={{ fontSize: 11, fill: '#1F2937' }} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={190}
+              tick={{ fontSize: 11, fill: '#1F2937' }}
+              // Recharts auto-wraps long category labels onto multiple lines
+              // constrained to `width`, but the fixed 34px row height only
+              // fits one — long introducer names (e.g. "Steve Whittington
+              // (Simple Property Finance Ltd)") wrapped and overlapped the
+              // bar above/below. Truncating keeps every row single-line; the
+              // full name still shows in the tooltip and in the drilldown title.
+              tickFormatter={(v) => (v.length > 28 ? `${v.slice(0, 28)}…` : v)}
+            />
             <Tooltip cursor={{ fill: '#F7F9FB' }} formatter={(v) => [fmtInt(v), 'Leads']} />
             <Bar
               dataKey="count"
@@ -131,6 +186,7 @@ export default function Introducers() {
                   <th className="px-3 py-2.5 font-medium text-xs text-muted text-right">Open</th>
                   <th className="px-3 py-2.5 font-medium text-xs text-muted text-right">Conversion %</th>
                   <th className="px-3 py-2.5 font-medium text-xs text-muted text-right">Revenue</th>
+                  <th className="px-3 py-2.5 font-medium text-xs text-muted text-right">Performance</th>
                 </tr>
               </thead>
               <tbody>
@@ -174,10 +230,13 @@ export default function Introducers() {
                       <td className="px-3 py-2.5 text-right">
                         {s.revenue.hasData ? fmtCurrency(s.revenue.sum) : <span className="text-muted">{DASH}</span>}
                       </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <PerformanceBadge tier={s.performance.tier} />
+                      </td>
                     </tr>,
                     isOpen && (
                       <tr key={s.source + '__detail'} className="bg-page/50">
-                        <td colSpan={7} className="px-3 py-3">
+                        <td colSpan={8} className="px-3 py-3">
                           <div className="grid sm:grid-cols-2 gap-6">
                             <div className="pl-6 space-y-1.5">
                               <p className="text-xs font-medium text-muted mb-2">By negotiator</p>
@@ -210,7 +269,7 @@ export default function Introducers() {
                 })}
                 {!m.stats.length && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-muted">
+                    <td colSpan={8} className="px-3 py-10 text-center text-muted">
                       No records
                     </td>
                   </tr>

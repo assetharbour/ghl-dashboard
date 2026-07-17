@@ -3,7 +3,14 @@ import { useData } from '../context/DataContext'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtDate, parseDate, displayValue, DASH } from '../lib/format'
-import { isOnHold, isStuck, isAnomalousAdmin, ADMIN_FILTER_PROPS } from '../lib/metrics'
+import {
+  isOnHold,
+  isStuck,
+  isAnomalousAdmin,
+  isAwaitingClientResponse,
+  isFindingPropertyCase,
+  ADMIN_FILTER_PROPS,
+} from '../lib/metrics'
 
 const QUEUES = [
   { id: 'docs-requested', label: 'Docs Requested', test: (r) => r.pipeline_stage === 'Docs Requested' },
@@ -17,6 +24,12 @@ const QUEUES = [
     label: 'Interested / Not Ready',
     test: (r) => r.pipeline_stage === 'Interested / Not Ready',
   },
+  {
+    id: 'awaiting-client',
+    label: 'Awaiting Client Response',
+    test: (r) => isAwaitingClientResponse(r),
+  },
+  { id: 'finding-property', label: 'Finding Property', test: (r) => isFindingPropertyCase(r) },
   { id: 'lender', label: 'Lender Processing', test: (r) => r.pipeline_stage === 'Lender Processing' },
   { id: 'on-hold', label: 'On Hold', test: (r) => isOnHold(r) },
   { id: 'stuck', label: 'Stuck / Flagged', test: (r) => isStuck(r), alert: true },
@@ -78,7 +91,7 @@ export default function Cases() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-8 gap-4">
           {QUEUES.map((q) => (
             <Skeleton key={q.id} className="h-[92px]" />
           ))}
@@ -92,7 +105,7 @@ export default function Cases() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-8 gap-4">
         {m.queues.map((q) => {
           const isActive = q.id === active.id
           return (
@@ -131,9 +144,19 @@ export default function Cases() {
             },
             { key: 'lead_source', label: 'Lead Source' },
             {
+              key: 'property_status',
+              label: 'Property Status',
+              render: (r) => displayValue(r.property_status),
+            },
+            {
               key: 'admin_call_attempt_count',
               label: 'Call Attempts',
               render: (r) => displayValue(r.admin_call_attempt_count),
+            },
+            {
+              key: 'docs_chase_attempt_count',
+              label: 'Docs Chase Attempts',
+              render: (r) => displayValue(r.docs_chase_attempt_count),
             },
           ]}
           rows={active.rows}

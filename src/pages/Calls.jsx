@@ -6,10 +6,73 @@ import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
-import { fmtInt, fmtPct, num, isBlank, DASH } from '../lib/format'
+import { fmtInt, fmtPct, fmtDate, num, isBlank, parseDate, daysBetween, DASH } from '../lib/format'
 import { CHART_COLORS, ADMIN_FILTER_PROPS } from '../lib/metrics'
 
 const eqi = (v, target) => String(v).trim().toLowerCase() === target
+const NO_ADMIN = '(No admin assigned)'
+const NO_ADVISOR = '(No advisor assigned)'
+
+/** One row per distinct value of groupKeyFn — leads count, total attempts, answered, contact rate. */
+function leaderboardRows(rows, { groupKeyFn, statusField, attemptField, defaultLabel }) {
+  const groups = new Map()
+  for (const r of rows) {
+    const key = groupKeyFn(r) || defaultLabel
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(r)
+  }
+  return [...groups.entries()].map(([name, groupRows]) => {
+    const attempts = groupRows.reduce((sum, r) => sum + num(r[attemptField]), 0)
+    const answered = groupRows.filter((r) => eqi(r[statusField], 'answered')).length
+    const attempted = groupRows.filter((r) => num(r[attemptField]) > 0 || !isBlank(r[statusField])).length
+    return {
+      __key: name,
+      name,
+      count: groupRows.length,
+      attempts,
+      answered,
+      attempted,
+      contactRatePct: attempted ? (100 * answered) / attempted : null,
+    }
+  })
+}
+
+const leaderboardCols = (roleLabel) => [
+  { key: 'name', label: roleLabel },
+  { key: 'count', label: 'Cases' },
+  { key: 'attempts', label: 'Total Call Attempts' },
+  { key: 'answered', label: 'Answered' },
+  { key: 'contactRatePct', label: 'Contact Rate', render: (r) => fmtPct(r.answered, r.attempted) },
+]
+
+// Due when: completion 11+ months ago, OR mortgage_product_roll_off_date is
+// within the next 90 days — whichever trigger fires first ("soonest of the
+// two candidate due dates") drives the reason shown. Only cases with a
+// completion_date set are eligible at all.
+function annualReviewCandidates(rows, now = new Date()) {
+  return rows
+    .filter((r) => !isBlank(r.completion_date))
+    .map((r) => {
+      const completion = parseDate(r.completion_date)
+      if (!completion) return null
+      const rollOff = parseDate(r.mortgage_product_roll_off_date)
+      const completionDueDate = new Date(
+        completion.getFullYear(),
+        completion.getMonth() + 11,
+        completion.getDate()
+      )
+      const dueDate = rollOff && rollOff < completionDueDate ? rollOff : completionDueDate
+      return { ...r, __daysUntilDue: Math.round(daysBetween(now, dueDate)) }
+    })
+    .filter((r) => r && r.__daysUntilDue <= 90)
+    .sort((a, b) => a.__daysUntilDue - b.__daysUntilDue)
+}
+
+function dueLabel(days) {
+  if (days < 0) return `${Math.abs(days)}d overdue`
+  if (days === 0) return 'Due today'
+  return `in ${days}d`
+}
 
 /** Builds the outcome/histogram/KPI numbers for one call stage (admin or advisor). */
 function buildCallStats(rows, { statusField, attemptField, includePending }) {
@@ -127,6 +190,45 @@ export default function Calls() {
     [rows]
   )
 
+  const adminLeaderboard = useMemo(
+    () =>
+      leaderboardRows(rows, {
+        groupKeyFn: (r) => r.admin,
+        statusField: 'admin_call_status',
+        attemptField: 'admin_call_attempt_count',
+        defaultLabel: NO_ADMIN,
+      }),
+    [rows]
+  )
+  const advisorLeaderboard = useMemo(
+    () =>
+      leaderboardRows(rows, {
+        groupKeyFn: (r) => r.advisor_name,
+        statusField: 'advisor_call_status',
+        attemptField: 'advisor_call_attempt_count',
+        defaultLabel: NO_ADVISOR,
+      }),
+    [rows]
+  )
+
+  const annualReview = useMemo(() => annualReviewCandidates(rows), [rows])
+  const annualReviewCols = [
+    { key: 'client_name', label: 'Client' },
+    { key: 'completion_date', label: 'Completed', render: (r) => fmtDate(r.completion_date) },
+    {
+      key: 'mortgage_product_roll_off_date',
+      label: 'Product Roll-off',
+      render: (r) => fmtDate(r.mortgage_product_roll_off_date),
+    },
+    { key: 'admin', label: 'Admin' },
+    {
+      key: '__daysUntilDue',
+      label: 'Days Until/Since Due',
+      render: (r) => dueLabel(r.__daysUntilDue),
+      sortValue: (r) => r.__daysUntilDue,
+    },
+  ]
+
   const adminAttemptCols = [
     { key: 'admin_call_attempt_count', label: 'Admin Attempts' },
     { key: 'admin_call_status', label: 'Admin Call Status' },
@@ -168,6 +270,87 @@ export default function Calls() {
             openDrilldown(`${d.label} advisor call attempts: ${fmtInt(d.count)} leads`, d.rows, advisorAttemptCols),
         }}
       />
+
+      <div className="border-t border-line" />
+
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Annual Review Calls – Mortgage &amp; Protection</h2>
+          <p className="text-xs text-muted mt-1">
+            Completed cases due for a review call: 11+ months since completion_date, or
+            mortgage_product_roll_off_date within the next 90 days — whichever comes first
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KPICard
+            label="Annual Review Calls Due"
+            value={fmtInt(annualReview.length)}
+            sub="11mo+ since completion OR roll-off within 90 days"
+            alert={annualReview.length > 0}
+            onClick={() =>
+              openDrilldown(`Annual review calls due: ${fmtInt(annualReview.length)}`, annualReview, annualReviewCols)
+            }
+          />
+        </div>
+        {loading ? (
+          <Skeleton className="h-80" />
+        ) : (
+          <div className="card p-5">
+            <DataTable
+              columns={annualReviewCols}
+              rows={annualReview}
+              filters={[{ key: 'admin', label: 'Admin', ...ADMIN_FILTER_PROPS }]}
+              pageSize={25}
+              exportName="annual_review_calls_due"
+              initialSort={{ key: '__daysUntilDue', dir: 'asc' }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-line" />
+
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-base font-semibold text-ink">Calls per User Leaderboard</h2>
+          <p className="text-xs text-muted mt-1">
+            Total call attempts and contact rate by admin (Stage 1) and by advisor (Stage 3), sorted by volume
+          </p>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-5">
+          {loading ? (
+            <>
+              <Skeleton className="h-64" />
+              <Skeleton className="h-64" />
+            </>
+          ) : (
+            <>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-ink mb-4">By Admin</h3>
+                <DataTable
+                  columns={leaderboardCols('Admin')}
+                  rows={adminLeaderboard}
+                  searchable={false}
+                  pageSize={25}
+                  initialSort={{ key: 'attempts', dir: 'desc' }}
+                />
+              </div>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-ink mb-4">By Advisor</h3>
+                <DataTable
+                  columns={leaderboardCols('Advisor')}
+                  rows={advisorLeaderboard}
+                  searchable={false}
+                  pageSize={25}
+                  initialSort={{ key: 'attempts', dir: 'desc' }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-line" />
 
       {loading ? (
         <Skeleton className="h-80" />

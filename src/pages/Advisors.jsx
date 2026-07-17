@@ -6,7 +6,7 @@ import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDays, fmtDate, isBlank, parseDate as pd, DASH } from '../lib/format'
-import { stageAtOrBeyond, avgDaysToCompletion, isOnHold, EXPECTED_ADMINS } from '../lib/metrics'
+import { stageAtOrBeyond, avgDaysToCompletion, isOnHold, mean, EXPECTED_ADMINS } from '../lib/metrics'
 
 const eq = (v, target) => String(v).trim().toLowerCase() === target
 const NO_ADVISOR = '(No advisor assigned)'
@@ -18,12 +18,21 @@ const advisorOf = (r) => {
 const METRIC_DEFS = [
   { id: 'assigned', label: 'Cases Assigned', test: () => true },
   { id: 'contacted', label: 'Contacted', test: (r) => eq(r.admin_call_status, 'answered') },
-  { id: 'appts', label: 'Appts Booked', test: (r) => stageAtOrBeyond(r, 'Appointment Booked') },
+  // Appointments completed has no confirmed-calendar signal yet (needs parked
+  // calendar events sync) — this is the same stage-progression proxy as
+  // "Appts Booked" below it, so it is not duplicated as a separate column.
+  { id: 'appts', label: 'Appts Booked (proxy for Completed)', test: (r) => stageAtOrBeyond(r, 'Appointment Booked') },
+  { id: 'recommendation', label: 'To Recommendation', test: (r) => stageAtOrBeyond(r, 'Advisor Recommendation') },
   { id: 'apps', label: 'Applications', test: (r) => eq(r.application_submission_status, 'submitted') },
+  { id: 'offers', label: 'Offers Issued', test: (r) => stageAtOrBeyond(r, 'Offer Issued') },
   { id: 'mortgageDone', label: 'Mortgage Completed', test: (r) => !isBlank(r.completion_status) },
   { id: 'protectionDone', label: 'Protection Completed', test: (r) => eq(r.protection_status, 'submitted') },
   { id: 'lost', label: 'Declined / NPW', test: (r) => r.case_status === 'lost' },
-  { id: 'onHold', label: 'On Hold', test: (r) => isOnHold(r) },
+  // "On Hold" = currently paused (pause_automations non-empty), not a
+  // quarter-end snapshot — GHL custom fields hold only current state, there
+  // is no historical log of when pause_automations changed, so a true
+  // "on hold at quarter end" figure isn't reconstructable from this data.
+  { id: 'onHold', label: 'On Hold (current)', test: (r) => isOnHold(r) },
 ]
 
 function clawBackRisk(rows) {
@@ -75,15 +84,24 @@ export default function Advisors() {
       const counts = {}
       for (const def of METRIC_DEFS) counts[def.id] = own.filter(def.test)
       const won = own.filter((r) => r.case_status === 'won').length
+      const lostCount = own.filter((r) => r.case_status === 'lost').length
+      // Close rate = won / (won + lost) — deliberately excludes still-open
+      // cases, unlike Conversion Rate below (won / all cases assigned).
+      const closeRateDenom = won + lostCount
+      const docsChaseVals = own
+        .filter((r) => !isBlank(r.docs_chase_attempt_count) && Number.isFinite(Number(r.docs_chase_attempt_count)))
+        .map((r) => Number(r.docs_chase_attempt_count))
       return {
         name,
         own,
         counts,
         won,
         conv: own.length ? won / own.length : null,
+        closeRateDenom,
         avgDays: avgDaysToCompletion(own),
+        avgDocsChaseAttempts: mean(docsChaseVals),
         openCount: own.filter((r) => r.case_status === 'open').length,
-        lostCount: own.filter((r) => r.case_status === 'lost').length,
+        lostCount,
       }
     })
 
@@ -91,7 +109,9 @@ export default function Advisors() {
       const val = (g) => {
         if (sort.key === 'name') return g.name
         if (sort.key === 'conv') return g.conv ?? -1
+        if (sort.key === 'closeRate') return g.closeRateDenom ? g.won / g.closeRateDenom : -1
         if (sort.key === 'avgDays') return g.avgDays ?? Infinity
+        if (sort.key === 'avgDocsChaseAttempts') return g.avgDocsChaseAttempts ?? -1
         return g.counts[sort.key]?.length ?? 0
       }
       const av = val(a)
@@ -107,13 +127,16 @@ export default function Advisors() {
   const kpi = useMemo(() => {
     const sel = m.selectedRows
     const won = sel.filter((r) => r.case_status === 'won').length
+    const lost = sel.filter((r) => r.case_status === 'lost').length
     return {
       assigned: sel,
       contacted: sel.filter((r) => eq(r.admin_call_status, 'answered')),
       appts: sel.filter((r) => stageAtOrBeyond(r, 'Appointment Booked')),
       apps: sel.filter((r) => eq(r.application_submission_status, 'submitted')),
+      offers: sel.filter((r) => stageAtOrBeyond(r, 'Offer Issued')),
       completions: sel.filter((r) => !isBlank(r.completion_status)),
       won,
+      lost,
       avgDays: avgDaysToCompletion(sel),
     }
   }, [m.selectedRows])
@@ -141,7 +164,9 @@ export default function Advisors() {
     { key: 'name', label: 'Advisor' },
     ...METRIC_DEFS.map((d) => ({ key: d.id, label: d.label })),
     { key: 'conv', label: 'Conversion %' },
+    { key: 'closeRate', label: 'Close Rate %' },
     { key: 'avgDays', label: 'Avg Days' },
+    { key: 'avgDocsChaseAttempts', label: 'Avg Docs Chase Attempts' },
   ]
 
   const popPct = m.baseCount ? (100 * m.populated) / m.baseCount : 0
@@ -189,7 +214,7 @@ export default function Advisors() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KPICard
           label="Cases Assigned"
           value={fmtInt(kpi.assigned.length)}
@@ -217,6 +242,11 @@ export default function Advisors() {
           }
         />
         <KPICard
+          label="Offers Issued"
+          value={fmtInt(kpi.offers.length)}
+          onClick={() => drill(`${scope}: offers issued`, kpi.offers)}
+        />
+        <KPICard
           label="Completions"
           value={fmtInt(kpi.completions.length)}
           onClick={() =>
@@ -226,6 +256,11 @@ export default function Advisors() {
           }
         />
         <KPICard label="Conversion Rate" value={fmtPct(kpi.won, kpi.assigned.length)} sub={`${fmtInt(kpi.won)} won`} />
+        <KPICard
+          label="Close Rate"
+          value={fmtPct(kpi.won, kpi.won + kpi.lost)}
+          sub={`${fmtInt(kpi.won)} won of ${fmtInt(kpi.won + kpi.lost)} decided`}
+        />
         <KPICard label="Avg Days to Completion" value={kpi.avgDays === null ? DASH : fmtDays(kpi.avgDays)} />
       </div>
 
@@ -277,7 +312,11 @@ export default function Advisors() {
                       )
                     })}
                     <td className="px-3 py-2.5 tabular-nums">{fmtPct(g.won, g.own.length)}</td>
+                    <td className="px-3 py-2.5 tabular-nums">{fmtPct(g.won, g.closeRateDenom)}</td>
                     <td className="px-3 py-2.5 tabular-nums">{g.avgDays === null ? DASH : fmtDays(g.avgDays)}</td>
+                    <td className="px-3 py-2.5 tabular-nums">
+                      {g.avgDocsChaseAttempts === null ? DASH : g.avgDocsChaseAttempts.toFixed(1)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

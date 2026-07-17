@@ -9,11 +9,11 @@ import Cases from './pages/Cases'
 import Gapping from './pages/Gapping'
 import UnderDevelopment from './pages/UnderDevelopment'
 
-// Temporary — client requested these 4 pages gated behind a placeholder
+// Temporary — client requested these pages gated behind a placeholder
 // while data quality is finalized. Remove entries from this array (or
 // empty it entirely) to restore full access.
-// Added 2026-07-10, expected removal ~2026-07-18 (next weekend).
-const PAGES_UNDER_DEVELOPMENT = ['advisors', 'calls', 'cases', 'gapping']
+// Added 2026-07-10. Advisor Performance went live 2026-07-17.
+const PAGES_UNDER_DEVELOPMENT = ['calls', 'cases', 'gapping']
 
 const ROUTES = [
   { key: 'overview', path: '/', label: 'Overview', Component: Overview },
