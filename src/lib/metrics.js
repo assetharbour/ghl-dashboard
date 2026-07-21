@@ -155,11 +155,6 @@ export function avgDaysCreatedToCompletion(rows) {
   return mean(vals)
 }
 
-export function conversionRate(rows) {
-  if (!rows.length) return null
-  return rows.filter((r) => r.case_status === 'won').length / rows.length
-}
-
 export const DATE_RANGES = [
   { id: '7d', label: 'Last 7 days' },
   { id: '30d', label: 'Last 30 days' },

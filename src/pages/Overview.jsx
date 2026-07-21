@@ -17,14 +17,7 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDays, fmtDate, parseDate } from '../lib/format'
-import {
-  STAGE_ORDER,
-  CHART_COLORS,
-  countBy,
-  avgDaysToCompletion,
-  conversionRate,
-  inCurrentMonth,
-} from '../lib/metrics'
+import { STAGE_ORDER, CHART_COLORS, countBy, avgDaysToCompletion, inCurrentMonth } from '../lib/metrics'
 
 const TOP_SOURCES = 8
 
@@ -34,9 +27,11 @@ export default function Overview() {
   const m = useMemo(() => {
     const active = rows.filter((r) => r.case_status === 'open')
     const completionsMonth = rows.filter((r) => inCurrentMonth(r.completion_date))
-    const won = rows.filter((r) => r.case_status === 'won')
+    // Conversion = reached the "Completion" pipeline stage, same definition
+    // as Advisor Performance and Introducer Reports — not case_status,
+    // which can read "won" without the case ever reaching Completion.
+    const completions = rows.filter((r) => r.pipeline_stage === 'Completion')
     const avgDays = avgDaysToCompletion(rows)
-    const conv = conversionRate(rows)
 
     const stageCounts = countBy(rows, (r) => r.pipeline_stage)
     const funnel = STAGE_ORDER.map((stage) => ({
@@ -57,7 +52,7 @@ export default function Overview() {
       .sort((a, b) => parseDate(b.created_date) - parseDate(a.created_date))
       .slice(0, 10)
 
-    return { active, completionsMonth, won, avgDays, conv, funnel, donut, otherSources, recent }
+    return { active, completionsMonth, completions, avgDays, funnel, donut, otherSources, recent }
   }, [rows])
 
   const drillStage = (stage) =>
@@ -111,10 +106,10 @@ export default function Overview() {
         />
         <KPICard
           label="Conversion Rate"
-          value={m.conv === null ? '—' : fmtPct(m.won.length, rows.length)}
-          sub={`${fmtInt(m.won.length)} won`}
+          value={fmtPct(m.completions.length, rows.length)}
+          sub={`${fmtInt(m.completions.length)} completed`}
           onClick={() =>
-            openDrilldown(`Won cases: ${fmtInt(m.won.length)}`, m.won, [
+            openDrilldown(`Completed cases: ${fmtInt(m.completions.length)}`, m.completions, [
               { key: 'completion_date', label: 'Completed', render: (r) => fmtDate(r.completion_date) },
             ])
           }

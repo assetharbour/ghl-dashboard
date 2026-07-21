@@ -74,7 +74,21 @@ export default function Introducers() {
         const won = leads.filter((r) => r.case_status === 'won').length
         const lost = leads.filter((r) => r.case_status === 'lost').length
         const open = leads.filter((r) => r.case_status === 'open').length
-        return { source, leads, count: leads.length, won, lost, open, conv: won / leads.length, revenue: revenueStats(leads) }
+        // Conversion = reached the "Completion" pipeline stage, same
+        // definition as Advisor Performance — not case_status, which can
+        // read "won" without the case ever actually reaching Completion.
+        const completions = leads.filter((r) => r.pipeline_stage === 'Completion').length
+        return {
+          source,
+          leads,
+          count: leads.length,
+          won,
+          lost,
+          open,
+          completions,
+          conv: completions / leads.length,
+          revenue: revenueStats(leads),
+        }
       })
       .sort((a, b) => b.count - a.count)
 
@@ -117,7 +131,7 @@ export default function Introducers() {
         />
         <KPICard
           label="Best Conversion Rate"
-          value={m.bestConv ? fmtPct(m.bestConv.won, m.bestConv.count) : DASH}
+          value={m.bestConv ? fmtPct(m.bestConv.completions, m.bestConv.count) : DASH}
           sub={m.bestConv ? `${m.bestConv.source} (min ${MIN_LEADS_FOR_CONVERSION} leads)` : `min ${MIN_LEADS_FOR_CONVERSION} leads`}
           onClick={m.bestConv ? () => drillIntroducer(m.bestConv) : undefined}
         />
@@ -226,7 +240,7 @@ export default function Introducers() {
                       <td className="px-3 py-2.5 text-right">{fmtInt(s.won)}</td>
                       <td className="px-3 py-2.5 text-right">{fmtInt(s.lost)}</td>
                       <td className="px-3 py-2.5 text-right">{fmtInt(s.open)}</td>
-                      <td className="px-3 py-2.5 text-right">{fmtPct(s.won, s.count)}</td>
+                      <td className="px-3 py-2.5 text-right">{fmtPct(s.completions, s.count)}</td>
                       <td className="px-3 py-2.5 text-right">
                         {s.revenue.hasData ? fmtCurrency(s.revenue.sum) : <span className="text-muted">{DASH}</span>}
                       </td>
