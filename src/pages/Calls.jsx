@@ -21,8 +21,20 @@ const NO_ADVISOR = '(No advisor assigned)'
 // so it must NOT count as "attempted," even though the field itself is
 // non-blank. This is the one status value that isn't evidence of a call.
 const CONTACTED_STATUSES = ['answered', 'no answer', 'voicemail']
-const isAttempted = (r, attemptField, statusField) =>
-  num(r[attemptField]) > 0 || CONTACTED_STATUSES.includes(String(r[statusField]).trim().toLowerCase())
+
+// GHL is supposed to bump the attempt counter to at least 1 the moment a
+// call is logged as Answered/No Answer/Voicemail, but it doesn't always
+// fire — admin_call_attempt_count is populated on only ~20% of rows while
+// admin_call_status is populated on ~69%. Trusting the raw counter alone
+// undercounts attempts below the count of completed-outcome leads, which
+// is impossible (you can't answer a call without attempting it). This
+// enforces the floor: a completed-outcome row always counts as >= 1
+// attempt even when the counter field itself is blank/stale.
+const effectiveAttempts = (r, attemptField, statusField) => {
+  const raw = num(r[attemptField])
+  return CONTACTED_STATUSES.includes(String(r[statusField]).trim().toLowerCase()) ? Math.max(raw, 1) : raw
+}
+const isAttempted = (r, attemptField, statusField) => effectiveAttempts(r, attemptField, statusField) > 0
 
 /** One row per distinct value of groupKeyFn — leads count, total attempts, answered, contact rate. */
 function leaderboardRows(rows, { groupKeyFn, statusField, attemptField, defaultLabel }) {
@@ -33,7 +45,7 @@ function leaderboardRows(rows, { groupKeyFn, statusField, attemptField, defaultL
     groups.get(key).push(r)
   }
   return [...groups.entries()].map(([name, groupRows]) => {
-    const attempts = groupRows.reduce((sum, r) => sum + num(r[attemptField]), 0)
+    const attempts = groupRows.reduce((sum, r) => sum + effectiveAttempts(r, attemptField, statusField), 0)
     const answered = groupRows.filter((r) => eqi(r[statusField], 'answered')).length
     const attempted = groupRows.filter((r) => isAttempted(r, attemptField, statusField)).length
     return {
@@ -89,7 +101,7 @@ const KNOWN_STATUSES = ['answered', 'no answer', 'voicemail', 'pending']
 
 /** Builds the outcome/histogram/KPI numbers for one call stage (admin or advisor). */
 function buildCallStats(rows, { statusField, attemptField }) {
-  const totalAttempts = rows.reduce((sum, r) => sum + num(r[attemptField]), 0)
+  const totalAttempts = rows.reduce((sum, r) => sum + effectiveAttempts(r, attemptField, statusField), 0)
   const answered = rows.filter((r) => eqi(r[statusField], 'answered'))
   const noAnswer = rows.filter((r) => eqi(r[statusField], 'no answer'))
   const voicemail = rows.filter((r) => eqi(r[statusField], 'voicemail'))
@@ -118,7 +130,7 @@ function buildCallStats(rows, { statusField, attemptField }) {
 
   const buckets = ['0', '1', '2', '3', '4+'].map((label) => ({ label, rows: [] }))
   for (const r of rows) {
-    const n = num(r[attemptField])
+    const n = effectiveAttempts(r, attemptField, statusField)
     const idx = n >= 4 ? 4 : n
     buckets[idx].rows.push(r)
   }
