@@ -13,7 +13,8 @@ import UnderDevelopment from './pages/UnderDevelopment'
 // while data quality is finalized. Remove entries from this array (or
 // empty it entirely) to restore full access.
 // Added 2026-07-10. Advisor Performance went live 2026-07-17.
-const PAGES_UNDER_DEVELOPMENT = ['calls', 'cases', 'gapping']
+// Call Tracking, Case Management, and Gapping went live 2026-07-17.
+const PAGES_UNDER_DEVELOPMENT = []
 
 const ROUTES = [
   { key: 'overview', path: '/', label: 'Overview', Component: Overview },
