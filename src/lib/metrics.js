@@ -79,8 +79,12 @@ export function hasProtection(row) {
   return parseBool(row.has_protection)
 }
 
+// On Hold = case_status is 'abandoned' — not pause_automations, which is a
+// noisy multi-select of which pipeline stages have automations paused and
+// stays populated on cases long after they've closed (won/lost/abandoned),
+// so it doesn't reliably mean "currently on hold."
 export function isOnHold(row) {
-  return !isBlank(row.pause_automations)
+  return row.case_status === 'abandoned'
 }
 
 // Proxy for "Awaiting Client Response" — no literal GHL field, tag, or task

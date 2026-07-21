@@ -33,9 +33,9 @@ const METRIC_DEFS = [
   { id: 'mortgageDone', label: 'Mortgage Completed', test: (r) => r.pipeline_stage === 'Completion' },
   { id: 'protectionDone', label: 'Protection Completed', test: (r) => eq(r.protection_status, 'submitted') },
   { id: 'lost', label: 'Declined / NPW', test: (r) => r.case_status === 'lost' },
-  // "On Hold" = currently paused (pause_automations non-empty), not a
-  // quarter-end snapshot — GHL custom fields hold only current state, there
-  // is no historical log of when pause_automations changed, so a true
+  // "On Hold" = case_status === 'abandoned' (see isOnHold in metrics.js).
+  // Not a quarter-end snapshot — GHL custom fields hold only current state,
+  // there is no historical log of past case_status changes, so a true
   // "on hold at quarter end" figure isn't reconstructable from this data.
   { id: 'onHold', label: 'On Hold (current)', test: (r) => isOnHold(r) },
   // Same isStuck() definition used on Case Management: open, created 30+
