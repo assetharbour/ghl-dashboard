@@ -13,6 +13,17 @@ const eqi = (v, target) => String(v).trim().toLowerCase() === target
 const NO_ADMIN = '(No admin assigned)'
 const NO_ADVISOR = '(No advisor assigned)'
 
+// admin_call_status / advisor_call_status are both 4-option GHL dropdowns:
+// Answered, No Answer, Voicemail, Pending. Answered/No Answer/Voicemail all
+// mean the call actually happened — GHL increments the attempt counter the
+// moment a call is logged as one of these. Pending means the opposite: the
+// call hasn't happened yet, it's queued waiting for its next attempt time —
+// so it must NOT count as "attempted," even though the field itself is
+// non-blank. This is the one status value that isn't evidence of a call.
+const CONTACTED_STATUSES = ['answered', 'no answer', 'voicemail']
+const isAttempted = (r, attemptField, statusField) =>
+  num(r[attemptField]) > 0 || CONTACTED_STATUSES.includes(String(r[statusField]).trim().toLowerCase())
+
 /** One row per distinct value of groupKeyFn — leads count, total attempts, answered, contact rate. */
 function leaderboardRows(rows, { groupKeyFn, statusField, attemptField, defaultLabel }) {
   const groups = new Map()
@@ -24,7 +35,7 @@ function leaderboardRows(rows, { groupKeyFn, statusField, attemptField, defaultL
   return [...groups.entries()].map(([name, groupRows]) => {
     const attempts = groupRows.reduce((sum, r) => sum + num(r[attemptField]), 0)
     const answered = groupRows.filter((r) => eqi(r[statusField], 'answered')).length
-    const attempted = groupRows.filter((r) => num(r[attemptField]) > 0 || !isBlank(r[statusField])).length
+    const attempted = groupRows.filter((r) => isAttempted(r, attemptField, statusField)).length
     return {
       __key: name,
       name,
@@ -74,26 +85,33 @@ function dueLabel(days) {
   return `in ${days}d`
 }
 
+const KNOWN_STATUSES = ['answered', 'no answer', 'voicemail', 'pending']
+
 /** Builds the outcome/histogram/KPI numbers for one call stage (admin or advisor). */
-function buildCallStats(rows, { statusField, attemptField, includePending }) {
+function buildCallStats(rows, { statusField, attemptField }) {
   const totalAttempts = rows.reduce((sum, r) => sum + num(r[attemptField]), 0)
   const answered = rows.filter((r) => eqi(r[statusField], 'answered'))
   const noAnswer = rows.filter((r) => eqi(r[statusField], 'no answer'))
-  const pending = includePending ? rows.filter((r) => eqi(r[statusField], 'pending')) : []
+  const voicemail = rows.filter((r) => eqi(r[statusField], 'voicemail'))
+  // Pending means the call hasn't happened yet — it's queued for its next
+  // attempt time, not a completed outcome. Kept separate from "attempted".
+  const pending = rows.filter((r) => eqi(r[statusField], 'pending'))
   const notCalled = rows.filter((r) => isBlank(r[statusField]))
-  const knownStatuses = ['answered', 'no answer', ...(includePending ? ['pending'] : [])]
   const otherStatus = rows.filter(
-    (r) => !isBlank(r[statusField]) && !knownStatuses.includes(String(r[statusField]).trim().toLowerCase())
+    (r) => !isBlank(r[statusField]) && !KNOWN_STATUSES.includes(String(r[statusField]).trim().toLowerCase())
   )
 
-  // a lead counts as "attempted" if it has either an attempt count or a recorded outcome —
-  // GHL's attempt counters are sparsely populated relative to the status field
-  const attempted = rows.filter((r) => num(r[attemptField]) > 0 || !isBlank(r[statusField]))
+  // "Attempted" = the call actually happened: either GHL's attempt counter
+  // is > 0, or the status is one of the 3 completed-call outcomes
+  // (Answered/No Answer/Voicemail). Pending and blank are both excluded —
+  // pending is explicitly "not yet attempted, waiting for next attempt".
+  const attempted = rows.filter((r) => isAttempted(r, attemptField, statusField))
 
   const outcomes = [
     { name: 'Answered', count: answered.length, rows: answered },
     { name: 'No Answer', count: noAnswer.length, rows: noAnswer },
-    ...(includePending ? [{ name: 'Pending', count: pending.length, rows: pending }] : []),
+    { name: 'Voicemail', count: voicemail.length, rows: voicemail },
+    { name: 'Pending', count: pending.length, rows: pending },
     { name: 'Not called', count: notCalled.length, rows: notCalled },
     ...(otherStatus.length ? [{ name: 'Other', count: otherStatus.length, rows: otherStatus }] : []),
   ]
@@ -106,21 +124,21 @@ function buildCallStats(rows, { statusField, attemptField, includePending }) {
   }
   const histogram = buckets.map((b) => ({ label: b.label, count: b.rows.length, rows: b.rows }))
 
-  return { totalAttempts, answered, noAnswer, pending, notCalled, attempted, outcomes, histogram }
+  return { totalAttempts, answered, noAnswer, voicemail, pending, notCalled, attempted, outcomes, histogram }
 }
 
-function CallSection({ title, subtitle, scopeLabel, stats, attemptCols, totalRows, hasPending }) {
-  const kpiGridCols = hasPending ? 'xl:grid-cols-6' : 'xl:grid-cols-5'
+function CallSection({ title, subtitle, scopeLabel, stats, attemptCols, totalRows }) {
   return (
     <div className="space-y-5">
       <h2 className="text-base font-semibold text-ink">{title}</h2>
       {subtitle && <p className="text-xs text-muted -mt-4">{subtitle}</p>}
 
-      <div className={`grid grid-cols-2 md:grid-cols-3 ${kpiGridCols} gap-4`}>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <KPICard label={`${scopeLabel} Call Attempts`} value={fmtInt(stats.totalAttempts)} />
         <KPICard label="Answered" value={fmtInt(stats.answered.length)} />
         <KPICard label="No Answer" value={fmtInt(stats.noAnswer.length)} />
-        {hasPending && <KPICard label="Pending" value={fmtInt(stats.pending.length)} />}
+        <KPICard label="Voicemail" value={fmtInt(stats.voicemail.length)} />
+        <KPICard label="Pending" value={fmtInt(stats.pending.length)} sub="waiting for next attempt" />
         <KPICard
           label={`${scopeLabel} Contact Rate`}
           value={fmtPct(stats.answered.length, stats.attempted.length)}
@@ -173,11 +191,11 @@ export default function Calls() {
   const { rows, loading, openDrilldown } = useData()
 
   const admin = useMemo(
-    () => buildCallStats(rows, { statusField: 'admin_call_status', attemptField: 'admin_call_attempt_count', includePending: false }),
+    () => buildCallStats(rows, { statusField: 'admin_call_status', attemptField: 'admin_call_attempt_count' }),
     [rows]
   )
   const advisorStats = useMemo(
-    () => buildCallStats(rows, { statusField: 'advisor_call_status', attemptField: 'advisor_call_attempt_count', includePending: true }),
+    () => buildCallStats(rows, { statusField: 'advisor_call_status', attemptField: 'advisor_call_attempt_count' }),
     [rows]
   )
 
@@ -244,7 +262,6 @@ export default function Calls() {
         title="Admin Calls (Stage 1)"
         subtitle="First-contact call made by the admin handling the case: admin_call_status / admin_call_attempt_count"
         scopeLabel="Admin"
-        hasPending={false}
         stats={admin}
         totalRows={rows.length}
         attemptCols={{
@@ -260,7 +277,6 @@ export default function Calls() {
         title="Advisor Calls (Stage 3)"
         subtitle="Advisor's own call at Appointment Booked: advisor_call_status / advisor_call_attempt_count (separate from the Stage 7 recommendation call)"
         scopeLabel="Advisor"
-        hasPending
         stats={advisorStats}
         totalRows={rows.length}
         attemptCols={{
