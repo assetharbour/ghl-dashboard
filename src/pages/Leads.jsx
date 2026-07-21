@@ -3,8 +3,8 @@ import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
-import { fmtInt, fmtDate, parseDate } from '../lib/format'
-import { stageAtOrBeyond, ADMIN_FILTER_PROPS } from '../lib/metrics'
+import { fmtInt, fmtDate, parseDate, isBlank } from '../lib/format'
+import { ADMIN_FILTER_PROPS } from '../lib/metrics'
 
 export default function Leads() {
   const { rows, loading, openDrilldown } = useData()
@@ -13,7 +13,10 @@ export default function Leads() {
     const caseType = (r) => String(r.mortgage_case_type).toLowerCase()
     const purchase = rows.filter((r) => caseType(r).includes('purchase'))
     const remortgage = rows.filter((r) => caseType(r).includes('remortgage'))
-    const appointments = rows.filter((r) => stageAtOrBeyond(r, 'Appointment Booked'))
+    // A call was logged at either stage — admin's first-contact call
+    // (Stage 1) or the advisor's own call (Stage 3) — not the pipeline
+    // stage proxy, which counted leads that never actually got called.
+    const appointments = rows.filter((r) => !isBlank(r.admin_call_status) || !isBlank(r.advisor_call_status))
     return { purchase, remortgage, appointments }
   }, [rows])
 
@@ -45,12 +48,15 @@ export default function Leads() {
         <KPICard
           label="Appointments Booked"
           value={fmtInt(m.appointments.length)}
-          sub="at or beyond Appointment Booked"
+          sub="admin or advisor call logged"
           onClick={() =>
             openDrilldown(
               `Appointments booked: ${fmtInt(m.appointments.length)}`,
               m.appointments,
-              [createdCol]
+              [
+                { key: 'admin_call_status', label: 'Admin Call Status' },
+                { key: 'advisor_call_status', label: 'Advisor Call Status' },
+              ]
             )
           }
         />
