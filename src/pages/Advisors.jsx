@@ -251,7 +251,7 @@ export default function Advisors() {
           <AlertTriangle size={15} className="text-amber-700 shrink-0" />
           <p className="text-[13px] text-amber-800">
             Advisor field populated on <strong>{popPct.toFixed(1)}%</strong> of cases ({fmtInt(m.populated)} of{' '}
-            {fmtInt(m.baseCount)}). This report only covers cases with a named advisor — unassigned cases are
+            {fmtInt(m.baseCount)}). This report only covers cases with a named advisor: unassigned cases are
             excluded from every KPI and the grid below, and counted separately in "{NO_ADVISOR}".
           </p>
         </div>
@@ -297,7 +297,7 @@ export default function Advisors() {
           }
         />
         <KPICard
-          label="Cases Progressing to Recommendation"
+          label="Cases Progression to Recommendation"
           value={fmtInt(kpi.recommendation.length)}
           onClick={() =>
             drill(`${scope}: to recommendation`, kpi.recommendation, [
@@ -376,8 +376,8 @@ export default function Advisors() {
       ) : (
         <div className="space-y-5">
           <ChartCard
-            title="Pipeline Funnel"
-            subtitle={`${scope} — where cases drop off through the funnel. Click a bar to view records`}
+            title="Lead Stages"
+            subtitle={`${scope}: where cases drop off through the funnel. Click a bar to view records`}
           >
             <ResponsiveContainer width="100%" height={Math.max(280, funnelData.length * 40)}>
               <BarChart data={funnelData} layout="vertical" margin={{ top: 8, right: 48, left: 8 }}>
@@ -453,7 +453,7 @@ export default function Advisors() {
               )}
             </ChartCard>
 
-            <ChartCard title="Call Outcome Breakdown" subtitle={`${scope} — advisor_call_status across all cases`}>
+            <ChartCard title="Call Outcome Breakdown" subtitle={`${scope}: advisor_call_status across all cases`}>
               <ResponsiveContainer width="100%" height={70}>
                 <BarChart data={outcomeData} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
                   <XAxis type="number" hide domain={[0, outcomeTotal || 1]} />

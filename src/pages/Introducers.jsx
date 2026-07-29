@@ -292,7 +292,7 @@ export default function Introducers() {
             </table>
           </div>
           <p className="text-[11px] text-muted mt-3">
-            Revenue shown only reflects cases where fee fields have been recorded — {m.revenuePopPct.toFixed(1)}% of
+            Revenue shown only reflects cases where fee fields have been recorded: {m.revenuePopPct.toFixed(1)}% of
             cases currently have this data.
           </p>
         </div>

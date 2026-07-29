@@ -306,7 +306,7 @@ export default function Calls() {
           <h2 className="text-base font-semibold text-ink">Annual Review Calls – Mortgage &amp; Protection</h2>
           <p className="text-xs text-muted mt-1">
             Completed cases due for a review call: 11+ months since completion_date, or
-            mortgage_product_roll_off_date within the next 90 days — whichever comes first
+            mortgage_product_roll_off_date within the next 90 days, whichever comes first
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

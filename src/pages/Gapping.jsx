@@ -70,7 +70,7 @@ export default function Gapping() {
       </div>
 
       <div className="grid lg:grid-cols-5 gap-5">
-        <ChartCard title="Mortgage Book Protection" subtitle="click a segment to view records" className="lg:col-span-2">
+        <ChartCard title="Mortgage to Protection" subtitle="click a segment to view records" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie

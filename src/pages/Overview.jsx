@@ -122,7 +122,7 @@ export default function Overview() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <ChartCard title="Pipeline Funnel" subtitle="Cases per stage, in pipeline order. Click a bar to view records">
+        <ChartCard title="Lead Stages" subtitle="Cases per stage, in pipeline order. Click a bar to view records">
           <ResponsiveContainer width="100%" height={420}>
             <BarChart data={m.funnel} layout="vertical" margin={{ left: 8, right: 24 }}>
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
