@@ -72,13 +72,8 @@ export default function Cases() {
     const queues = QUEUES.map((q) => ({ ...q, rows: rows.filter(q.test) }))
 
     const erc = rows
-      .filter((r) => parseDate(r.erc_date) || parseDate(r.mortgage_product_roll_off_date))
-      .map((r) => {
-        const soonest = [parseDate(r.erc_date), parseDate(r.mortgage_product_roll_off_date)]
-          .filter(Boolean)
-          .sort((a, b) => a - b)[0]
-        return { ...r, __soonest: soonest.getTime() }
-      })
+      .filter((r) => parseDate(r.mortgage_product_roll_off_date))
+      .map((r) => ({ ...r, __soonest: parseDate(r.mortgage_product_roll_off_date).getTime() }))
       .sort((a, b) => a.__soonest - b.__soonest)
 
     const anomalousAdmin = rows.filter((r) => isAnomalousAdmin(r.admin))
@@ -202,19 +197,13 @@ export default function Cases() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-ink mb-1">ERC / Product Roll-off</h3>
+        <h3 className="text-sm font-semibold text-ink mb-1">Product Roll-off</h3>
         <p className="text-xs text-muted mb-4">
           Sorted soonest first: red within 30 days, amber within 90, green beyond
         </p>
         <DataTable
           columns={[
             { key: 'client_name', label: 'Client' },
-            {
-              key: 'erc_date',
-              label: 'ERC Date',
-              render: (r) => <ErcChip date={r.erc_date} />,
-              sortValue: (r) => parseDate(r.erc_date)?.getTime() ?? Infinity,
-            },
             {
               key: 'mortgage_product_roll_off_date',
               label: 'Roll-off Date',
@@ -230,7 +219,7 @@ export default function Cases() {
             { key: 'advisor_name', label: 'Advisor', blankLabel: '(No advisor assigned)' },
           ]}
           pageSize={25}
-          exportName="erc_roll_off"
+          exportName="product_roll_off"
         />
       </div>
     </div>
