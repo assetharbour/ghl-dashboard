@@ -5,7 +5,7 @@ import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
-import { fmtInt, fmtPct, fmtDays, fmtDate, isBlank, parseDate as pd, DASH } from '../lib/format'
+import { fmtInt, fmtPct, fmtDays, fmtDate, isBlank, DASH } from '../lib/format'
 import { stageAtOrBeyond, avgDaysCreatedToCompletion, isOnHold, isStuck, mean } from '../lib/metrics'
 
 const eq = (v, target) => String(v).trim().toLowerCase() === target
@@ -43,20 +43,6 @@ const METRIC_DEFS = [
   // (Lead Received / Admin Contacted / Appointment Booked) — never moved.
   { id: 'stuck', label: 'Stuck / Flagged', test: (r) => isStuck(r) },
 ]
-
-function clawBackRisk(rows) {
-  const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - 24)
-  return rows.filter((r) => {
-    const start = pd(r.protection_start_date)
-    return (
-      start &&
-      start >= cutoff &&
-      eq(r.protection_status, 'submitted') &&
-      !isBlank(r.protection_policy_number)
-    )
-  })
-}
 
 export default function Advisors() {
   const { rows, loading, openDrilldown } = useData()
@@ -128,8 +114,7 @@ export default function Advisors() {
       return sort.dir === 'asc' ? cmp : -cmp
     })
 
-    const clawBack = clawBackRisk(selectedRows)
-    return { advisors, selectedRows, grid: sorted, clawBack, populated, baseCount: rows.length, unassignedRows }
+    return { advisors, selectedRows, grid: sorted, populated, baseCount: rows.length, unassignedRows }
   }, [rows, advisor, sort])
 
   const kpi = useMemo(() => {
@@ -547,51 +532,19 @@ export default function Advisors() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-5">
-        <ChartCard
-          title="Cases per Advisor by Status"
-          subtitle="open / won / lost"
-          className="lg:col-span-2"
-        >
-          <ResponsiveContainer width="100%" height={Math.max(260, stackData.length * 30)}>
-            <BarChart data={stackData} layout="vertical" margin={{ left: 8, right: 24 }}>
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
-              <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: '#1F2937' }} />
-              <Tooltip cursor={{ fill: '#F7F9FB' }} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="open" stackId="s" fill="#5B7B94" />
-              <Bar dataKey="won" stackId="s" fill="#6DA544" />
-              <Bar dataKey="lost" stackId="s" fill="#8896A6" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <div className="space-y-4">
-          <KPICard
-            label="Claw Back Risk"
-            value={fmtInt(m.clawBack.length)}
-            sub="live policies started in the last 24 months"
-            alert={m.clawBack.length > 0}
-            onClick={() =>
-              drill(`Claw back risk: ${fmtInt(m.clawBack.length)} policies`, m.clawBack, [
-                { key: 'protection_provider', label: 'Provider' },
-                {
-                  key: 'protection_start_date',
-                  label: 'Policy Start',
-                  render: (r) => fmtDate(r.protection_start_date),
-                },
-                { key: 'protection_premium', label: 'Premium' },
-              ])
-            }
-          />
-          <div className="card px-4 py-4">
-            <p className="text-[13px] text-muted leading-relaxed">
-              Policies cancelled within 24 months of start typically trigger commission claw-back.
-              Keep these clients warm. Review contact cadence for everyone in this list.
-            </p>
-          </div>
-        </div>
-      </div>
+      <ChartCard title="Cases per Advisor by Status" subtitle="open / won / lost">
+        <ResponsiveContainer width="100%" height={Math.max(260, stackData.length * 30)}>
+          <BarChart data={stackData} layout="vertical" margin={{ left: 8, right: 24 }}>
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+            <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: '#1F2937' }} />
+            <Tooltip cursor={{ fill: '#F7F9FB' }} />
+            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="open" stackId="s" fill="#5B7B94" />
+            <Bar dataKey="won" stackId="s" fill="#6DA544" />
+            <Bar dataKey="lost" stackId="s" fill="#8896A6" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
     </div>
   )
 }

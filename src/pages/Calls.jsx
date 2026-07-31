@@ -68,26 +68,33 @@ const leaderboardCols = (roleLabel) => [
   { key: 'contactRatePct', label: 'Contact Rate', render: (r) => fmtPct(r.answered, r.attempted) },
 ]
 
-// Due when: completion 11+ months ago, OR mortgage_product_roll_off_date is
-// within the next 90 days — whichever trigger fires first ("soonest of the
-// two candidate due dates") drives the reason shown. Only cases with a
-// completion_date set are eligible at all.
+// Tracked purely off mortgage_product_roll_off_date: the client gets called
+// once a year, every year, counting down to the roll-off date itself — the
+// roll-off date is the final call, not an extra one past it. E.g. roll-off
+// = 20 Dec 2029, checked today (any date before 20 Dec 2026): the annual
+// call dates are 20 Dec 2026 / 2027 / 2028 / 2029 — 4 calls pending, next
+// one due 20 Dec 2026. Already-passed anniversaries in the current year
+// don't count (that call's window has gone).
 function annualReviewCandidates(rows, now = new Date()) {
   return rows
-    .filter((r) => !isBlank(r.completion_date))
     .map((r) => {
-      const completion = parseDate(r.completion_date)
-      if (!completion) return null
       const rollOff = parseDate(r.mortgage_product_roll_off_date)
-      const completionDueDate = new Date(
-        completion.getFullYear(),
-        completion.getMonth() + 11,
-        completion.getDate()
-      )
-      const dueDate = rollOff && rollOff < completionDueDate ? rollOff : completionDueDate
-      return { ...r, __daysUntilDue: Math.round(daysBetween(now, dueDate)) }
+      if (!rollOff) return null
+      const dates = []
+      for (let y = now.getFullYear(); y <= rollOff.getFullYear(); y++) {
+        const candidate = new Date(y, rollOff.getMonth(), rollOff.getDate())
+        if (candidate >= now && candidate <= rollOff) dates.push(candidate)
+      }
+      if (!dates.length) return null
+      const nextDue = dates[0]
+      return {
+        ...r,
+        __callsPending: dates.length,
+        __nextDue: nextDue,
+        __daysUntilDue: Math.round(daysBetween(now, nextDue)),
+      }
     })
-    .filter((r) => r && r.__daysUntilDue <= 90)
+    .filter(Boolean)
     .sort((a, b) => a.__daysUntilDue - b.__daysUntilDue)
 }
 
@@ -242,18 +249,28 @@ export default function Calls() {
   )
 
   const annualReview = useMemo(() => annualReviewCandidates(rows), [rows])
+  const totalCallsPending = useMemo(
+    () => annualReview.reduce((sum, r) => sum + r.__callsPending, 0),
+    [annualReview]
+  )
   const annualReviewCols = [
     { key: 'client_name', label: 'Client' },
-    { key: 'completion_date', label: 'Completed', render: (r) => fmtDate(r.completion_date) },
     {
       key: 'mortgage_product_roll_off_date',
       label: 'Product Roll-off',
       render: (r) => fmtDate(r.mortgage_product_roll_off_date),
     },
     { key: 'admin', label: 'Admin' },
+    { key: '__callsPending', label: 'Calls Pending' },
+    {
+      key: '__nextDue',
+      label: 'Next Call Due',
+      render: (r) => fmtDate(r.__nextDue),
+      sortValue: (r) => r.__nextDue.getTime(),
+    },
     {
       key: '__daysUntilDue',
-      label: 'Days Until/Since Due',
+      label: 'Days Until Due',
       render: (r) => dueLabel(r.__daysUntilDue),
       sortValue: (r) => r.__daysUntilDue,
     },
@@ -305,18 +322,22 @@ export default function Calls() {
         <div>
           <h2 className="text-base font-semibold text-ink">Annual Review Calls – Mortgage &amp; Protection</h2>
           <p className="text-xs text-muted mt-1">
-            Completed cases due for a review call: 11+ months since completion_date, or
-            mortgage_product_roll_off_date within the next 90 days, whichever comes first
+            Tracked from mortgage_product_roll_off_date: the client gets called once a year, every year,
+            counting down to the roll-off date itself
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KPICard
             label="Annual Review Calls Due"
             value={fmtInt(annualReview.length)}
-            sub="11mo+ since completion OR roll-off within 90 days"
+            sub={`${fmtInt(totalCallsPending)} calls pending across all clients`}
             alert={annualReview.length > 0}
             onClick={() =>
-              openDrilldown(`Annual review calls due: ${fmtInt(annualReview.length)}`, annualReview, annualReviewCols)
+              openDrilldown(
+                `Annual review calls due: ${fmtInt(annualReview.length)} clients`,
+                annualReview,
+                annualReviewCols
+              )
             }
           />
         </div>
