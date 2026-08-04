@@ -1,6 +1,19 @@
 import { num, parseDate, parseBool, isBlank, daysBetween } from './format'
 
-// Pipeline stages in actual funnel order — never sort these alphabetically
+// Pipeline stages in actual funnel order — never sort these alphabetically.
+//
+// GHL added a "Lost" stage after this list was first built, sitting last in
+// GHL's own stage order (position 14, after Post Completion) — but it is
+// deliberately NOT included here. stageAtOrBeyond()/stageIndex() treat a
+// stage's position in this array as "how far the case progressed"; if
+// "Lost" were appended at the end, a case lost early (e.g. at Docs
+// Requested) would read as having reached every later stage — Offers
+// Issued, Completion, all of it — the moment it's moved to Lost. Leaving
+// it out of STAGE_ORDER makes stageIndex() return -1 for it, so every
+// stageAtOrBeyond() check correctly evaluates to false for a lost case,
+// with no special-casing needed. It still displays correctly everywhere
+// that just reads pipeline_stage directly (tables, filters, exports) since
+// those aren't driven by this array.
 export const STAGE_ORDER = [
   'Lead Received',
   'Admin Contacted',
