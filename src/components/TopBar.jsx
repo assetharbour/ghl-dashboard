@@ -1,8 +1,8 @@
 import { useLocation } from 'react-router-dom'
 import { Menu, RefreshCw } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import { DATE_RANGES } from '../lib/metrics'
 import { relTime } from '../lib/format'
+import DateRangePicker from './DateRangePicker'
 
 const TITLES = {
   '/': 'Overview',
@@ -16,7 +16,7 @@ const TITLES = {
 
 export default function TopBar({ onMenu }) {
   const { pathname } = useLocation()
-  const { lastSync, refresh, refreshing, dateRange, setDateRange } = useData()
+  const { lastSync, refresh, refreshing, dateRange, setDateRange, customRange, setCustomRange } = useData()
 
   return (
     <header className="bg-card border-b border-line px-4 lg:px-6 py-3 flex items-center gap-3 sticky top-0 z-20">
@@ -25,18 +25,15 @@ export default function TopBar({ onMenu }) {
       </button>
       <h1 className="page-title truncate">{TITLES[pathname] || 'Dashboard'}</h1>
       <div className="ml-auto flex items-center gap-2 lg:gap-3">
-        <select
+        <DateRangePicker
           value={dateRange}
-          onChange={(e) => setDateRange(e.target.value)}
-          className="text-sm border border-line rounded-lg px-2.5 py-1.5 bg-card text-ink focus:outline-none focus:ring-2 focus:ring-brand-green/40"
-          aria-label="Date range"
-        >
-          {DATE_RANGES.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.label}
-            </option>
-          ))}
-        </select>
+          customRange={customRange}
+          onPreset={setDateRange}
+          onCustomRange={(range) => {
+            setCustomRange(range)
+            setDateRange('custom')
+          }}
+        />
         <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted bg-page border border-line rounded-full px-3 py-1.5 whitespace-nowrap">
           <span className="w-1.5 h-1.5 rounded-full bg-brand-green inline-block" />
           Updated {relTime(lastSync)}

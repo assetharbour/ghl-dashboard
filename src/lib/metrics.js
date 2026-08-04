@@ -167,8 +167,17 @@ export const DATE_RANGES = [
   { id: 'all', label: 'All time' },
 ]
 
-export function filterByDateRange(rows, rangeId) {
+export function filterByDateRange(rows, rangeId, customRange) {
   if (rangeId === 'all') return rows
+  if (rangeId === 'custom') {
+    if (!customRange?.from || !customRange?.to) return rows
+    const to = new Date(customRange.to)
+    to.setHours(23, 59, 59, 999) // include the whole end day
+    return rows.filter((r) => {
+      const d = parseDate(r.created_date)
+      return d && d >= customRange.from && d <= to
+    })
+  }
   const now = new Date()
   let from
   if (rangeId === 'quarter') {

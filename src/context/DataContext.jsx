@@ -10,6 +10,7 @@ export function DataProvider({ children }) {
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [dateRange, setDateRange] = useState('all')
+  const [customRange, setCustomRange] = useState({ from: null, to: null })
   const [drilldown, setDrilldown] = useState(null)
   const timerRef = useRef(null)
 
@@ -37,8 +38,8 @@ export function DataProvider({ children }) {
   }, [load])
 
   const rows = useMemo(
-    () => filterByDateRange(allRows || [], dateRange),
-    [allRows, dateRange]
+    () => filterByDateRange(allRows || [], dateRange, customRange),
+    [allRows, dateRange, customRange]
   )
 
   const openDrilldown = useCallback((title, drillRows, extraColumns = []) => {
@@ -58,11 +59,25 @@ export function DataProvider({ children }) {
       refresh: () => load(),
       dateRange,
       setDateRange,
+      customRange,
+      setCustomRange,
       drilldown,
       openDrilldown,
       closeDrilldown,
     }),
-    [allRows, rows, lastSync, error, refreshing, dateRange, drilldown, load, openDrilldown, closeDrilldown]
+    [
+      allRows,
+      rows,
+      lastSync,
+      error,
+      refreshing,
+      dateRange,
+      customRange,
+      drilldown,
+      load,
+      openDrilldown,
+      closeDrilldown,
+    ]
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>
