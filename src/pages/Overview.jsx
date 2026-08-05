@@ -34,7 +34,12 @@ export default function Overview() {
     const avgDays = avgDaysToCompletion(rows)
 
     const stageCounts = countBy(rows, (r) => r.pipeline_stage)
-    const funnel = STAGE_ORDER.map((stage) => ({
+    // "Lost" is deliberately not in STAGE_ORDER itself (see the comment on
+    // that constant) — including it there would make stageAtOrBeyond()
+    // treat a lost case as having reached every later stage. It's appended
+    // here only for display, since this chart is a plain per-stage count,
+    // not a progression check.
+    const funnel = [...STAGE_ORDER, 'Lost'].map((stage) => ({
       stage,
       count: stageCounts.get(stage) || 0,
     }))
