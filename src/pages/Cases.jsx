@@ -137,6 +137,11 @@ export default function Cases() {
               },
               sortValue: (r) => daysInState(r) ?? -1,
             },
+            {
+              key: 'pipeline_stage',
+              label: 'Stage',
+              render: (r) => displayValue(r.pipeline_stage),
+            },
             { key: 'lead_source', label: 'Lead Source' },
             {
               key: 'property_status',

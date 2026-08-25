@@ -22,6 +22,9 @@ export const STAGE_ORDER = [
   'Docs Requested',
   'Docs Received / Full Review',
   'Advisor Recommendation',
+  // Added by the client after this list was first built — sits here in
+  // GHL's own live stage order (confirmed via the pipelines API).
+  'Awaiting Client Response',
   'Solicitor / Application Prep',
   'Application Submitted',
   'Lender Processing',
@@ -117,7 +120,16 @@ export function isAwaitingClientResponse(row) {
 // "Both" has never appeared live but is matched in case it starts being used.
 export function isFindingPropertyCase(row) {
   const v = String(row.property_status).trim().toLowerCase()
-  return (v === 'buy-to-let' || v === 'both') && row.case_status === 'open'
+  if (!(v === 'buy-to-let' || v === 'both') || row.case_status !== 'open') return false
+  // Once a case has moved forward past Awaiting Client Response, the
+  // property is assumed secured even if property_status was never
+  // manually flipped back — staff forget to update that field once the
+  // client has actually found somewhere. Sitting AT that stage still
+  // counts, since forward progress hasn't happened yet.
+  const idx = stageIndex(row.pipeline_stage)
+  const acrIdx = stageIndex('Awaiting Client Response')
+  if (idx >= 0 && acrIdx >= 0 && idx > acrIdx) return false
+  return true
 }
 
 // case_status = open AND older than 30 days AND still in the first 3 stages
