@@ -40,7 +40,7 @@ const METRIC_DEFS = [
   { id: 'onHold', label: 'On Hold (current)', test: (r) => isOnHold(r) },
   // Same isStuck() definition used on Case Management: open, created 30+
   // days ago, and still stuck at one of the first 3 pipeline stages
-  // (Lead Received / Admin Contacted / Appointment Booked) — never moved.
+  // (Lead Received / Client Contacted / Appointment Booked) — never moved.
   { id: 'stuck', label: 'Stuck / Flagged', test: (r) => isStuck(r) },
 ]
 
@@ -218,6 +218,7 @@ export default function Advisors() {
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm text-muted">Advisor:</label>
         <select
+          aria-label="Filter by advisor"
           value={advisor}
           onChange={(e) => setAdvisor(e.target.value)}
           className="text-sm border border-line rounded-lg px-3 py-2 bg-card text-ink focus:outline-none focus:ring-2 focus:ring-brand-green/40"
@@ -258,6 +259,7 @@ export default function Advisors() {
         <KPICard
           label="Appointments Booked"
           value={fmtInt(kpi.appts.length)}
+          sub="advisor call logged (calendar bookings: Sales Team)"
           onClick={() =>
             drill(`${scope}: appointments booked`, kpi.appts, [
               { key: 'advisor_call_status', label: 'Call Status' },
@@ -267,6 +269,7 @@ export default function Advisors() {
         <KPICard
           label="Appointment Completed"
           value={fmtInt(kpi.appointmentCompleted.length)}
+          sub="advisor call answered"
           onClick={() =>
             drill(`${scope}: appointment completed`, kpi.appointmentCompleted, [
               { key: 'advisor_call_status', label: 'Call Status' },
@@ -353,7 +356,7 @@ export default function Advisors() {
       {loading ? (
         <div className="space-y-5">
           <Skeleton className="h-80" />
-          <div className="grid lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
             <Skeleton className="h-64" />
             <Skeleton className="h-64" />
           </div>
@@ -404,7 +407,7 @@ export default function Advisors() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <div className="grid lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
             <ChartCard title="Advisor Contact Rate" subtitle="Appointment Completed ÷ Appointments Booked, per advisor">
               {contactRateData.length ? (
                 <ResponsiveContainer width="100%" height={Math.max(160, contactRateData.length * 44)}>
@@ -475,9 +478,9 @@ export default function Advisors() {
         <Skeleton className="h-[480px]" />
       ) : (
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-ink mb-1">1:1 Review Grid</h3>
+          <h2 className="text-sm font-semibold text-ink mb-1">1:1 Review Grid</h2>
           <p className="text-xs text-muted mb-4">One row per advisor. Click any count to view the records behind it</p>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="1:1 review grid, scrollable">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left bg-page">

@@ -126,7 +126,7 @@ export default function Overview() {
         />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
         <ChartCard title="Lead Stages" subtitle="Cases per stage, in pipeline order. Click a bar to view records">
           <ResponsiveContainer width="100%" height={420}>
             <BarChart data={m.funnel} layout="vertical" margin={{ left: 8, right: 24 }}>
@@ -163,7 +163,7 @@ export default function Overview() {
                 onClick={(d) => drillSource(d.name)}
               >
                 {m.donut.map((entry, i) => (
-                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} aria-label={`${entry.name}: ${entry.value}`} />
                 ))}
               </Pie>
               <Tooltip formatter={(v, n) => [fmtInt(v), n]} />
@@ -182,7 +182,7 @@ export default function Overview() {
         <Skeleton className="h-72" />
       ) : (
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-ink mb-4">Recent Activity</h3>
+          <h2 className="text-sm font-semibold text-ink mb-4">Recent Activity</h2>
           <DataTable
             searchable={false}
             pageSize={10}

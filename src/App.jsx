@@ -7,6 +7,8 @@ import Advisors from './pages/Advisors'
 import Calls from './pages/Calls'
 import Cases from './pages/Cases'
 import Gapping from './pages/Gapping'
+import Sales from './pages/Sales'
+import Flags from './pages/Flags'
 import UnderDevelopment from './pages/UnderDevelopment'
 
 // Temporary — client requested these pages gated behind a placeholder
@@ -24,6 +26,8 @@ const ROUTES = [
   { key: 'calls', path: '/calls', label: 'Call Tracking', Component: Calls },
   { key: 'cases', path: '/cases', label: 'Case Management', Component: Cases },
   { key: 'gapping', path: '/gapping', label: 'Gapping', Component: Gapping },
+  { key: 'sales', path: '/sales', label: 'Sales Team', Component: Sales },
+  { key: 'flags', path: '/flags', label: 'Flags', Component: Flags },
 ]
 
 export default function App() {

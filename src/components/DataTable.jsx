@@ -26,6 +26,7 @@ export default function DataTable({
   filters = [],
   pageSize = 25,
   exportName,
+  ariaLabel,
   searchable = true,
   initialSort = null,
   onRowClick,
@@ -138,6 +139,7 @@ export default function DataTable({
           {filterOptions.map((f) => (
             <select
               key={f.key}
+              aria-label={`Filter by ${f.label}`}
               value={filterValues[f.key] || ''}
               onChange={(e) => {
                 setFilterValues((fv) => ({ ...fv, [f.key]: e.target.value }))
@@ -178,7 +180,7 @@ export default function DataTable({
           )}
         </div>
       )}
-      <div className="overflow-x-auto -mx-1 px-1">
+      <div className="overflow-x-auto -mx-1 px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green" tabIndex={0} role="region" aria-label={`${ariaLabel || (exportName || "data").replace(/_/g, " ")} table, scrollable`}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left bg-page">

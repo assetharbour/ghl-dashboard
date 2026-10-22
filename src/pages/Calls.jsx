@@ -7,7 +7,7 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDate, num, isBlank, parseDate, daysBetween, DASH } from '../lib/format'
-import { CHART_COLORS, ADMIN_FILTER_PROPS } from '../lib/metrics'
+import { CHART_COLORS, ADMIN_FILTER_PROPS, productEndDate } from '../lib/metrics'
 
 const eqi = (v, target) => String(v).trim().toLowerCase() === target
 const NO_ADMIN = '(No admin assigned)'
@@ -68,7 +68,7 @@ const leaderboardCols = (roleLabel) => [
   { key: 'contactRatePct', label: 'Contact Rate', render: (r) => fmtPct(r.answered, r.attempted) },
 ]
 
-// Tracked purely off mortgage_product_roll_off_date: the client gets called
+// Tracked purely off the product end date (the ERC Date, see productEndDate): the client gets called
 // once a year, every year, counting down to the roll-off date itself — the
 // roll-off date is the final call, not an extra one past it. E.g. roll-off
 // = 20 Dec 2029, checked today (any date before 20 Dec 2026): the annual
@@ -78,7 +78,7 @@ const leaderboardCols = (roleLabel) => [
 function annualReviewCandidates(rows, now = new Date()) {
   return rows
     .map((r) => {
-      const rollOff = parseDate(r.mortgage_product_roll_off_date)
+      const rollOff = parseDate(productEndDate(r))
       if (!rollOff) return null
       const dates = []
       for (let y = now.getFullYear(); y <= rollOff.getFullYear(); y++) {
@@ -89,6 +89,7 @@ function annualReviewCandidates(rows, now = new Date()) {
       const nextDue = dates[0]
       return {
         ...r,
+        __productEnd: productEndDate(r),
         __callsPending: dates.length,
         __nextDue: nextDue,
         __daysUntilDue: Math.round(daysBetween(now, nextDue)),
@@ -169,7 +170,7 @@ function CallSection({ title, subtitle, scopeLabel, stats, attemptCols, totalRow
         />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
         <ChartCard title="Call Outcomes" subtitle={`${title}. Click a bar to view records`}>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={stats.outcomes} margin={{ top: 8, right: 8 }}>
@@ -256,9 +257,9 @@ export default function Calls() {
   const annualReviewCols = [
     { key: 'client_name', label: 'Client' },
     {
-      key: 'mortgage_product_roll_off_date',
-      label: 'Product Roll-off',
-      render: (r) => fmtDate(r.mortgage_product_roll_off_date),
+      key: '__productEnd',
+      label: 'Product End Date (ERC)',
+      render: (r) => fmtDate(r.__productEnd),
     },
     { key: 'admin', label: 'Admin' },
     { key: '__callsPending', label: 'Calls Pending' },
@@ -322,8 +323,8 @@ export default function Calls() {
         <div>
           <h2 className="text-base font-semibold text-ink">Annual Review Calls – Mortgage &amp; Protection</h2>
           <p className="text-xs text-muted mt-1">
-            Tracked from mortgage_product_roll_off_date: the client gets called once a year, every year,
-            counting down to the roll-off date itself
+            Tracked from the product end date (the ERC Date): the client gets called once a year, every year,
+            counting down to the product end date itself
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -346,6 +347,7 @@ export default function Calls() {
         ) : (
           <div className="card p-5">
             <DataTable
+              ariaLabel="leads and attempts"
               columns={annualReviewCols}
               rows={annualReview}
               filters={[{ key: 'admin', label: 'Admin', ...ADMIN_FILTER_PROPS }]}
@@ -366,7 +368,7 @@ export default function Calls() {
             Total call attempts and contact rate by admin (Stage 1) and by advisor (Stage 3), sorted by volume
           </p>
         </div>
-        <div className="grid lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
           {loading ? (
             <>
               <Skeleton className="h-64" />
@@ -375,8 +377,9 @@ export default function Calls() {
           ) : (
             <>
               <div className="card p-5">
-                <h3 className="text-sm font-semibold text-ink mb-4">By Admin</h3>
+                <h2 className="text-sm font-semibold text-ink mb-4">By Admin</h2>
                 <DataTable
+                  ariaLabel="calls by admin"
                   columns={leaderboardCols('Admin')}
                   rows={adminLeaderboard}
                   searchable={false}
@@ -385,8 +388,9 @@ export default function Calls() {
                 />
               </div>
               <div className="card p-5">
-                <h3 className="text-sm font-semibold text-ink mb-4">By Advisor</h3>
+                <h2 className="text-sm font-semibold text-ink mb-4">By Advisor</h2>
                 <DataTable
+                  ariaLabel="calls by advisor"
                   columns={leaderboardCols('Advisor')}
                   rows={advisorLeaderboard}
                   searchable={false}
@@ -405,11 +409,12 @@ export default function Calls() {
         <Skeleton className="h-80" />
       ) : (
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-ink mb-1">Stuck in Calling</h3>
+          <h2 className="text-sm font-semibold text-ink mb-1">Stuck in Calling</h2>
           <p className="text-xs text-muted mb-4">
             Open cases with 3+ admin call attempts (Stage 1 only, see note below)
           </p>
           <DataTable
+            ariaLabel="stuck in calling"
             columns={[
               { key: 'client_name', label: 'Client' },
               {

@@ -1,12 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchDashboardData } from '../lib/sheets'
-import { filterByDateRange } from '../lib/metrics'
+import { filterByDateRange, attachAppointmentStart } from '../lib/metrics'
 
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
   const [allRows, setAllRows] = useState(null) // null = initial load in flight
   const [lastSync, setLastSync] = useState(null)
+  // Appointments, flags and Created By locks come from the sync's field audit; empty until it has run.
+  const [appointments, setAppointments] = useState([])
+  const [flags, setFlags] = useState([])
+  const [locks, setLocks] = useState([])
+  // What the advisor's Evonex call looked like per appointment, and calls per day per caller (empty until CALL_EVIDENCE is on).
+  const [callEvidence, setCallEvidence] = useState([])
+  const [callActivity, setCallActivity] = useState([])
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [dateRange, setDateRange] = useState('all')
@@ -17,9 +24,14 @@ export function DataProvider({ children }) {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setRefreshing(true)
     try {
-      const { rows, lastSync: sync } = await fetchDashboardData()
+      const { rows, lastSync: sync, appointments: appts, flags: flagRows, locks: lockRows, callEvidence: evidenceRows, callActivity: activityRows } = await fetchDashboardData()
       setAllRows(rows)
       setLastSync(sync)
+      setAppointments(appts)
+      setFlags(flagRows)
+      setLocks(lockRows)
+      setCallEvidence(evidenceRows || [])
+      setCallActivity(activityRows || [])
       setError(null)
     } catch (e) {
       console.error('Data fetch failed:', e)
@@ -37,9 +49,12 @@ export function DataProvider({ children }) {
     return () => clearInterval(timerRef.current)
   }, [load])
 
+  // Every lead carries the start of its latest live calendar appointment (used by the stuck-case rule).
+  const decoratedRows = useMemo(() => attachAppointmentStart(allRows || [], appointments), [allRows, appointments])
+
   const rows = useMemo(
-    () => filterByDateRange(allRows || [], dateRange, customRange),
-    [allRows, dateRange, customRange]
+    () => filterByDateRange(decoratedRows, dateRange, customRange),
+    [decoratedRows, dateRange, customRange]
   )
 
   const openDrilldown = useCallback((title, drillRows, extraColumns = []) => {
@@ -52,7 +67,12 @@ export function DataProvider({ children }) {
     () => ({
       loading: allRows === null && !error,
       error,
-      allRows: allRows || [],
+      allRows: decoratedRows,
+      appointments,
+      flags,
+      locks,
+      callEvidence,
+      callActivity,
       rows,
       lastSync,
       refreshing,
@@ -67,6 +87,12 @@ export function DataProvider({ children }) {
     }),
     [
       allRows,
+      decoratedRows,
+      appointments,
+      flags,
+      locks,
+      callEvidence,
+      callActivity,
       rows,
       lastSync,
       error,

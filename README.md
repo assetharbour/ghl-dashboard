@@ -43,3 +43,24 @@ a live deployment.
 Auth is enforced at Vercel's edge via `middleware.js` (Vercel Routing
 Middleware), before any page content, JS/CSS bundle or API response is served,
 and `api/leads.js` re-checks the same credentials itself.
+
+## Sales Team and Flags pages
+
+* `/sales` (Sales Team): appointments booked, showed, no-shows, cancelled, rebooked, full fact finds, completed, and the two
+  conversion rates per sales rep (booked -> full fact find, booked -> completed), per advisor, per week, the round-robin split,
+  the next working week, full fact finds by month, leads added per locked Created By, and the appointment list. The date range
+  (top right) applies to the day each appointment was **booked**. Weekly and monthly presets (This week, Last week, This month,
+  Last month) were added to the shared date range and work on every page.
+* `/flags` (Flags): changes and mismatches found by the sync's field audit (Created By / Booked By changed or cleared, Booked By
+  missing or not matching the calendar, advisor mismatch, appointment given to a non-advisor, new booking source).
+* Data: `api/leads.js` now also returns the `Appointments`, `Flags` and `Field_Locks` (Created By rows only) tabs. A tab that does
+  not exist yet is returned empty, so the Leads data never depends on them. These tabs are written by `ghl-reporting-sync`
+  (`FIELD_AUDIT=on`); the Leads tab gained `fact_find_outcome`, `fact_find_date` and `docs_requested` columns.
+* The KPI definitions live in `src/lib/sales.js`, a port of `ghl-reporting-sync/app/sales_metrics.py` (the agreed definitions
+  and tests). Change both together.
+* Tests: `npm test` (vitest). Preview with sample data: `npm run dev` and open `/sales?mock` (development only; the sample data
+  is not part of the production build).
+
+## QA
+
+The 22 Oct 2026 QA report (approach, results, defect log, UAT checklist, residual risks, how to repeat) is `../ghl-reporting-sync/docs/qa/QA_REPORT_2026-10-22.md`.

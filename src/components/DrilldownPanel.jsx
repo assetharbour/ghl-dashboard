@@ -4,6 +4,9 @@ import { useData } from '../context/DataContext'
 import { displayValue, downloadCSV, fmtInt, isBlank } from '../lib/format'
 
 const NO_ADVISOR = '(No advisor assigned)'
+// Rendering every row of a very large list freezes the browser (4,500 rows x 12 columns = 54,000 cells). The list is
+// capped on screen; search, the advisor filter and the CSV export always work on ALL matching rows.
+const MAX_RENDERED_ROWS = 1000
 
 const BASE_COLUMNS = [
   { key: 'client_name', label: 'Client' },
@@ -126,7 +129,7 @@ export default function DrilldownPanel() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, i) => (
+              {filtered.slice(0, MAX_RENDERED_ROWS).map((r, i) => (
                 // contact_id/opportunity_id are not always unique on their own
                 // (see DataTable.jsx) — appending the index guarantees a
                 // collision-free key so React never bleeds a stale row's DOM
@@ -142,6 +145,13 @@ export default function DrilldownPanel() {
                   ))}
                 </tr>
               ))}
+              {filtered.length > MAX_RENDERED_ROWS && (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-3 text-center text-xs text-muted bg-page">
+                    Showing the first {fmtInt(MAX_RENDERED_ROWS)} of {fmtInt(filtered.length)} records. Search or filter to narrow the list; the CSV export contains all {fmtInt(filtered.length)}.
+                  </td>
+                </tr>
+              )}
               {!filtered.length && (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-10 text-center text-muted text-sm">

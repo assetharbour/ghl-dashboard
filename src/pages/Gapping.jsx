@@ -69,7 +69,7 @@ export default function Gapping() {
         />
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 [&>*]:min-w-0">
         <ChartCard title="Mortgage to Protection" subtitle="click a segment to view records" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
@@ -90,7 +90,7 @@ export default function Gapping() {
                 }
               >
                 {donut.map((entry, i) => (
-                  <Cell key={entry.name} fill={DONUT_COLORS[i]} />
+                  <Cell key={entry.name} fill={DONUT_COLORS[i]} aria-label={`${entry.name}: ${entry.value}`} />
                 ))}
               </Pie>
               <Tooltip formatter={(v, n) => [fmtInt(v), n]} />
@@ -103,7 +103,7 @@ export default function Gapping() {
           <Skeleton className="h-96 lg:col-span-3" />
         ) : (
           <div className="card p-5 lg:col-span-3">
-            <h3 className="text-sm font-semibold text-ink mb-1">Gapping Work List</h3>
+            <h2 className="text-sm font-semibold text-ink mb-1">Gapping Work List</h2>
             <p className="text-xs text-muted mb-4">
               Unprotected mortgage cases, most recent completions first (warmest cross-sell)
             </p>

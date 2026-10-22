@@ -16,8 +16,9 @@ import { num, parseDate, parseBool, isBlank, daysBetween } from './format'
 // those aren't driven by this array.
 export const STAGE_ORDER = [
   'Lead Received',
-  'Admin Contacted',
+  'Client Contacted', // was "Admin Contacted" until GHL renamed the stage
   'Appointment Booked',
+  'Post Appointment', // new GHL stage: the advisor call was answered, documents not yet requested
   'Interested / Not Ready',
   'Docs Requested',
   'Docs Received / Full Review',
@@ -42,7 +43,9 @@ export const CHART_COLORS = ['#6DA544', '#2E3A48', '#94C973', '#5B7B94', '#C7DDB
 // Gulliver based on the admin_handover field (or removes the owner
 // entirely on its "None" branch). Any other Admin value was set by a
 // human manually reassigning the contact in GHL, bypassing both flows.
-export const EXPECTED_ADMINS = ['Anita Andrews', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver']
+// Updated for the S1-S6 workflows (22 Oct 2026): S1 Lead Intake now round-robins new leads to the 3 sales reps
+// (Ava, Harry, Hugo), so they are expected owners at stages 1-3, alongside the original four.
+export const EXPECTED_ADMINS = ['Anita Andrews', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver', 'Ava Morris-Boundy', 'Harry Kalsi', 'Hugo Sharpe']
 
 export function isAnomalousAdmin(adminValue) {
   return Boolean(adminValue) && !EXPECTED_ADMINS.includes(adminValue)
@@ -81,6 +84,13 @@ export function inCurrentMonth(dateStr) {
   if (!d) return false
   const now = new Date()
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+}
+
+// The product end date (the date a fixed rate / ERC period ends) is the ERC Date field. Talha confirmed this on 19 Oct
+// 2026. The older "mortgage product roll-off date" is the same thing but is filled on only 5 of 123 cases, so it is used
+// only when the ERC Date is empty (where both exist they agree: 5 of 5).
+export function productEndDate(row) {
+  return isBlank(row.erc_date) ? row.mortgage_product_roll_off_date : row.erc_date
 }
 
 export function totalCallAttempts(row) {
@@ -132,14 +142,65 @@ export function isFindingPropertyCase(row) {
   return true
 }
 
-// case_status = open AND older than 30 days AND still in the first 3 stages
+// case_status = open AND older than 30 days AND still in the first 3 stages.
+// Client request (6 Oct 2026): a case at Appointment Booked is only flagged once its appointment date has PASSED
+// (it should have moved on by then); a future appointment is not stuck. `__appt_start` (ms) is the start of the contact's
+// latest live calendar appointment, added by attachAppointmentStart(); without it the plain age rule applies.
 export function isStuck(row, now = new Date()) {
   if (row.case_status !== 'open') return false
   const created = parseDate(row.created_date)
   if (!created) return false
   const ageDays = (now.getTime() - created.getTime()) / 86400000
   const idx = stageIndex(row.pipeline_stage)
-  return ageDays > 30 && idx >= 0 && idx < 3
+  if (!(ageDays > 30 && idx >= 0 && idx < 3)) return false
+  if (row.pipeline_stage === 'Appointment Booked' && typeof row.__appt_start === 'number') return row.__appt_start < now.getTime()
+  return true
+}
+
+// Adds `__appt_start` (ms) to each lead that has a live (not cancelled, not deleted) calendar appointment: the start of the
+// contact's most recently BOOKED one. Leads with no calendar appointment are returned untouched.
+export function attachAppointmentStart(rows, appointments) {
+  const latest = new Map()
+  for (const a of appointments || []) {
+    if (!a.contact_id || !isBlank(a.deleted) || String(a.status).trim().toLowerCase() === 'cancelled') continue
+    const start = Date.parse(a.start_time)
+    if (Number.isNaN(start)) continue
+    const booked = String(a.booked_at ?? '')
+    const best = latest.get(a.contact_id)
+    if (!best || booked > best.booked) latest.set(a.contact_id, { booked, start })
+  }
+  if (!latest.size) return rows
+  return rows.map((r) => (latest.has(r.contact_id) ? { ...r, __appt_start: latest.get(r.contact_id).start } : r))
+}
+
+// ERC / product end-date renewal forecast (client priority, 6 Oct 2026): mortgages whose product ends from today to the end
+// of next calendar year, month by month, optionally for one advisor. next6 = the next six months from today, nextYear = the
+// whole of next calendar year, as clickable row lists. Months are calendar months in the viewer's timezone.
+export function ercForecast(rows, now = new Date(), advisor = '') {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const last = new Date(now.getFullYear() + 2, 0, 1).getTime() // exclusive: the end of next calendar year
+  const sixMonths = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate()).getTime()
+  const months = []
+  for (let y = now.getFullYear(), m = now.getMonth(); new Date(y, m, 1).getTime() < last; m++) {
+    if (m > 11) { m = 0; y++ }
+    months.push({ key: `${y}-${String(m + 1).padStart(2, '0')}`, label: new Date(y, m, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }), rows: [] })
+  }
+  const byKey = new Map(months.map((mo) => [mo.key, mo]))
+  const next6 = []
+  const nextYear = []
+  const nextYearNo = now.getFullYear() + 1
+  for (const r of rows) {
+    if (advisor && String(r.advisor_name ?? '').trim() !== advisor) continue
+    const d = parseDate(productEndDate(r))
+    if (!d) continue
+    const t = d.getTime()
+    if (t < start || t >= last) continue
+    const row = { ...r, __productEnd: productEndDate(r) }
+    byKey.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)?.rows.push(row)
+    if (t < sixMonths) next6.push(row)
+    if (d.getFullYear() === nextYearNo) nextYear.push(row)
+  }
+  return { months, next6, nextYear, nextYearNo, total: months.reduce((n, mo) => n + mo.rows.length, 0) }
 }
 
 export function countBy(rows, keyFn) {
@@ -188,31 +249,56 @@ export const DATE_RANGES = [
   { id: '7d', label: 'Last 7 days' },
   { id: '30d', label: 'Last 30 days' },
   { id: '90d', label: 'Last 90 days' },
+  { id: 'week', label: 'This week' },
+  { id: 'lastweek', label: 'Last week' },
+  { id: 'month', label: 'This month' },
+  { id: 'lastmonth', label: 'Last month' },
   { id: 'quarter', label: 'This quarter' },
   { id: 'all', label: 'All time' },
 ]
 
-export function filterByDateRange(rows, rangeId, customRange) {
-  if (rangeId === 'all') return rows
+/**
+ * The [from, to) window of a date-range choice, or null for "all time".
+ * `to` is null when the window is open-ended (up to now). Weeks start on Monday.
+ * The pay and target reports are weekly and monthly, hence the week / month presets.
+ */
+export function rangeBounds(rangeId, customRange, now = new Date()) {
+  if (rangeId === 'all') return null
   if (rangeId === 'custom') {
-    if (!customRange?.from || !customRange?.to) return rows
+    if (!customRange?.from || !customRange?.to) return null
     const to = new Date(customRange.to)
     to.setHours(23, 59, 59, 999) // include the whole end day
-    return rows.filter((r) => {
-      const d = parseDate(r.created_date)
-      return d && d >= customRange.from && d <= to
-    })
+    return { from: new Date(customRange.from), to, inclusiveTo: true }
   }
-  const now = new Date()
-  let from
-  if (rangeId === 'quarter') {
-    from = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
-  } else {
-    const days = { '7d': 7, '30d': 30, '90d': 90 }[rangeId]
-    from = new Date(now.getTime() - days * 86400000)
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const monday = new Date(day)
+  monday.setDate(day.getDate() - ((day.getDay() + 6) % 7))
+  switch (rangeId) {
+    case 'week':
+      return { from: monday, to: null }
+    case 'lastweek': {
+      const from = new Date(monday)
+      from.setDate(monday.getDate() - 7)
+      return { from, to: monday }
+    }
+    case 'month':
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: null }
+    case 'lastmonth':
+      return { from: new Date(now.getFullYear(), now.getMonth() - 1, 1), to: new Date(now.getFullYear(), now.getMonth(), 1) }
+    case 'quarter':
+      return { from: new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1), to: null }
+    default: {
+      const days = { '7d': 7, '30d': 30, '90d': 90 }[rangeId]
+      return { from: new Date(now.getTime() - days * 86400000), to: null }
+    }
   }
+}
+
+export function filterByDateRange(rows, rangeId, customRange, now = new Date()) {
+  const bounds = rangeBounds(rangeId, customRange, now)
+  if (!bounds) return rows
   return rows.filter((r) => {
     const d = parseDate(r.created_date)
-    return d && d >= from
+    return d && d >= bounds.from && (!bounds.to || (bounds.inclusiveTo ? d <= bounds.to : d < bounds.to))
   })
 }

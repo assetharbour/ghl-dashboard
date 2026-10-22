@@ -74,10 +74,19 @@ export function displayValue(v) {
   return isBlank(v) ? DASH : String(v)
 }
 
+// CSV injection: a cell that starts with = + - @ (or a tab / carriage return) is run as a formula when the file is opened
+// in Excel or Sheets. Client names, notes and advisor names come from GHL and can be typed by anyone, so such text is
+// prefixed with an apostrophe (shown as plain text). Real numbers, dates and phone numbers are left alone.
+const FORMULA_START = /^[=+\-@\t\r]/
+const PLAIN_NUMBER = /^[+-]?\d[\d\s().]*$/
+export function neutraliseFormula(text) {
+  return FORMULA_START.test(text) && !PLAIN_NUMBER.test(text) ? "'" + text : text
+}
+
 export function toCSV(rows, columns) {
   const esc = (v) => {
-    const s = v === null || v === undefined ? '' : String(v)
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+    const s = neutraliseFormula(v === null || v === undefined ? '' : String(v))
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
   }
   const header = columns.map((c) => esc(c.label)).join(',')
   const body = rows

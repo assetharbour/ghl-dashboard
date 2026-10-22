@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { GoogleAuth } from 'google-auth-library'
+import { createdByLocks } from './_locks.js'
 
 // Server-side reader for the private Leads sheet. The browser never talks to
 // Google: it calls this function, which reads the sheet with the service
@@ -60,6 +61,18 @@ async function readTab(sheetId, tab) {
   return res.data.values || []
 }
 
+// The audit tabs are written by the sync's field audit (FIELD_AUDIT=on). Until it has run once they do not
+// exist, and Google answers a missing tab with an error, so an unreadable tab is an empty tab here and
+// the Leads data keeps working.
+async function readOptionalTab(sheetId, tab) {
+  try {
+    return await readTab(sheetId, tab)
+  } catch (err) {
+    console.warn(`optional tab ${tab} not readable:`, err?.message || err)
+    return []
+  }
+}
+
 function dropColumns(values) {
   if (!values.length) return values
   const keep = values[0].map((header) => !OMIT_COLUMNS.has(header))
@@ -68,9 +81,26 @@ function dropColumns(values) {
 
 async function load() {
   const sheetId = process.env.GOOGLE_SHEET_ID
-  const [leads, log] = await Promise.all([readTab(sheetId, 'Leads'), readTab(sheetId, 'Sync_Log')])
+  const [leads, log, appointments, flags, locks, callEvidence, callActivity] = await Promise.all([
+    readTab(sheetId, 'Leads'),
+    readTab(sheetId, 'Sync_Log'),
+    readOptionalTab(sheetId, 'Appointments'),
+    readOptionalTab(sheetId, 'Flags'),
+    readOptionalTab(sheetId, 'Field_Locks'),
+    readOptionalTab(sheetId, 'Call_Evidence'),
+    readOptionalTab(sheetId, 'Call_Activity'),
+  ])
   // The dashboard only needs the newest Sync_Log row (for "Updated X min ago").
-  return { leads: dropColumns(leads), log: log.length > 1 ? [log[0], log[log.length - 1]] : log }
+  return {
+    leads: dropColumns(leads),
+    log: log.length > 1 ? [log[0], log[log.length - 1]] : log,
+    appointments,
+    flags,
+    locks: createdByLocks(locks),
+    // Ids, staff names, durations and counts only: the sync never writes a phone number into these tabs.
+    callEvidence,
+    callActivity,
+  }
 }
 
 export default async function handler(req, res) {

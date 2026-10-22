@@ -7,3 +7,6 @@ dist/
 
 .vercel
 .env*
+qa/diff_cases.json
+coverage/
+.local-audit.json

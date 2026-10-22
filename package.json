@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@vercel/functions": "^3.7.5",
@@ -19,9 +22,15 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^2.1.9",
     "autoprefixer": "^10.4.19",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.7",
-    "vite": "^5.3.5"
+    "vite": "^5.3.5",
+    "vitest": "^2.1.9"
   }
 }

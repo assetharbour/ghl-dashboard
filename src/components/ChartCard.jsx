@@ -7,7 +7,7 @@ export default function ChartCard({ title, subtitle, children, className = '' })
   return (
     <div className={`card p-5 ${className}`}>
       <div className="mb-4">
-        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
       </div>
       {children}

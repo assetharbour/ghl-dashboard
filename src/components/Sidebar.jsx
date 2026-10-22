@@ -7,18 +7,24 @@ import {
   Phone,
   FolderOpen,
   ShieldAlert,
+  UserCheck,
+  Flag,
   X,
 } from 'lucide-react'
 import logo from '../assets/assetharbour-logo.png'
 
+// Order follows the journey of a lead: the big picture, where leads come from, how the sales team works them (calls, then
+// appointments, then advisors), the casework after that, protection cross-sell, and data-quality flags last.
 const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
   { to: '/leads', label: 'Leads Received', icon: Inbox },
   { to: '/introducers', label: 'Introducer Reports', icon: Users },
-  { to: '/advisors', label: 'Advisor Performance', icon: TrendingUp },
   { to: '/calls', label: 'Call Tracking', icon: Phone },
+  { to: '/sales', label: 'Sales Team', icon: UserCheck },
+  { to: '/advisors', label: 'Advisor Performance', icon: TrendingUp },
   { to: '/cases', label: 'Case Management', icon: FolderOpen },
   { to: '/gapping', label: 'Gapping', icon: ShieldAlert },
+  { to: '/flags', label: 'Flags', icon: Flag },
 ]
 
 export default function Sidebar({ open, onClose }) {

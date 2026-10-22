@@ -12,7 +12,16 @@ const TITLES = {
   '/calls': 'Call Tracking',
   '/cases': 'Case Management',
   '/gapping': 'Gapping',
+  '/sales': 'Sales Team',
+  '/flags': 'Flags',
 }
+
+// The date range filters a different date on different pages. Saying which one removes a common source of confusion.
+const DATE_BASIS = {
+  '/sales': 'booked date or appointment date (choose on the page)',
+  '/flags': 'date flagged',
+}
+const DEFAULT_BASIS = 'lead created date'
 
 export default function TopBar({ onMenu }) {
   const { pathname } = useLocation()
@@ -25,6 +34,7 @@ export default function TopBar({ onMenu }) {
       </button>
       <h1 className="page-title truncate">{TITLES[pathname] || 'Dashboard'}</h1>
       <div className="ml-auto flex items-center gap-2 lg:gap-3">
+        <span className="hidden md:inline text-xs text-muted whitespace-nowrap">by {DATE_BASIS[pathname] || DEFAULT_BASIS}</span>
         <DateRangePicker
           value={dateRange}
           customRange={customRange}

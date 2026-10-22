@@ -187,9 +187,9 @@ export default function Introducers() {
         <Skeleton className="h-96" />
       ) : (
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-ink mb-1">Introducer Performance</h3>
+          <h2 className="text-sm font-semibold text-ink mb-1">Introducer Performance</h2>
           <p className="text-xs text-muted mb-4">Click a row to expand the negotiator and advisor breakdown</p>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Introducer table, scrollable">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left bg-page">

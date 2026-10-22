@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useData } from '../context/DataContext'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
@@ -7,6 +8,8 @@ import {
   isOnHold,
   isStuck,
   isAnomalousAdmin,
+  productEndDate,
+  ercForecast,
   isAwaitingClientResponse,
   isFindingPropertyCase,
   ADMIN_FILTER_PROPS,
@@ -67,13 +70,16 @@ const anomalousAdminCols = [
 export default function Cases() {
   const { rows, loading, openDrilldown } = useData()
   const [activeQueue, setActiveQueue] = useState(QUEUES[0].id)
+  const [forecastAdvisor, setForecastAdvisor] = useState('')
 
   const m = useMemo(() => {
     const queues = QUEUES.map((q) => ({ ...q, rows: rows.filter(q.test) }))
 
+    // Upcoming product end dates only (an end date that has passed is not a renewal to chase), soonest first.
+    const startOfToday = new Date().setHours(0, 0, 0, 0)
     const erc = rows
-      .filter((r) => parseDate(r.mortgage_product_roll_off_date))
-      .map((r) => ({ ...r, __soonest: parseDate(r.mortgage_product_roll_off_date).getTime() }))
+      .filter((r) => (parseDate(productEndDate(r))?.getTime() ?? -Infinity) >= startOfToday)
+      .map((r) => ({ ...r, __productEnd: productEndDate(r), __soonest: parseDate(productEndDate(r)).getTime() }))
       .sort((a, b) => a.__soonest - b.__soonest)
 
     const anomalousAdmin = rows.filter((r) => isAnomalousAdmin(r.admin))
@@ -82,6 +88,16 @@ export default function Cases() {
   }, [rows])
 
   const active = m.queues.find((q) => q.id === activeQueue) || m.queues[0]
+  const forecast = useMemo(() => ercForecast(rows, new Date(), forecastAdvisor), [rows, forecastAdvisor])
+  const forecastAdvisors = useMemo(
+    () => [...new Set(rows.map((r) => String(r.advisor_name ?? '').trim()).filter(Boolean))].sort(),
+    [rows]
+  )
+  const forecastCols = [
+    { key: '__productEnd', label: 'Product End Date (ERC)', render: (r) => fmtDate(r.__productEnd) },
+    { key: 'advisor_name', label: 'Advisor' },
+    { key: 'admin', label: 'Admin' },
+  ]
 
   if (loading) {
     return (
@@ -121,9 +137,9 @@ export default function Cases() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-ink mb-4">
+        <h2 className="text-sm font-semibold text-ink mb-4">
           Queue: {active.label} ({fmtInt(active.rows.length)})
-        </h3>
+        </h2>
         <DataTable
           columns={[
             { key: 'client_name', label: 'Client' },
@@ -171,11 +187,11 @@ export default function Cases() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-ink mb-1">Admin Assignment: Needs Review</h3>
+        <h2 className="text-sm font-semibold text-ink mb-1">Admin Assignment: Needs Review</h2>
         <p className="text-xs text-muted mb-4 max-w-2xl">
-          These cases show an admin who isn't part of the standard Lead Intake → Docs Received handover flow
-          (Anita Andrews → Ben Robertson / Lewis Flude / Alison Gulliver). Likely a manual reassignment in GHL,
-          worth reviewing with the team.
+          These cases show an admin who isn't part of the standard handover flow: the sales team at stages 1 to 3
+          (Ava Morris-Boundy, Harry Kalsi, Hugo Sharpe), then Anita Andrews, then Ben Robertson / Lewis Flude /
+          Alison Gulliver. Likely a manual reassignment in GHL, worth reviewing with the team.
         </p>
         <button
           onClick={() =>
@@ -202,18 +218,79 @@ export default function Cases() {
       </div>
 
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-ink mb-1">Product Roll-off</h3>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">ERC Renewal Forecast</h2>
+            <p className="text-xs text-muted mt-0.5 max-w-2xl">
+              Mortgages whose product ends (the ERC Date) from today to the end of {forecast.nextYearNo}, month by month. Only as
+              complete as the ERC dates held in GHL. Click a bar or a number to see the clients.
+            </p>
+          </div>
+          <label className="text-xs text-muted flex items-center gap-2">
+            Advisor
+            <select
+              value={forecastAdvisor}
+              onChange={(e) => setForecastAdvisor(e.target.value)}
+              className="border border-line rounded-md bg-white text-ink text-sm px-2 py-1"
+            >
+              <option value="">All advisors</option>
+              {forecastAdvisors.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {[
+            ['Next 6 months', forecast.next6],
+            [`All of ${forecast.nextYearNo}`, forecast.nextYear],
+            ['Today to end of ' + forecast.nextYearNo, forecast.months.flatMap((mo) => mo.rows)],
+          ].map(([label, list]) => (
+            <button
+              key={label}
+              onClick={() => openDrilldown(`ERC renewals, ${label}: ${fmtInt(list.length)}`, list, forecastCols)}
+              disabled={!list.length}
+              className="text-left group"
+            >
+              <div className="kpi-label">{label}</div>
+              <div className="text-2xl font-semibold text-ink group-hover:opacity-75">{fmtInt(list.length)}</div>
+            </button>
+          ))}
+        </div>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={forecast.months.map((mo) => ({ name: mo.label, count: mo.rows.length, key: mo.key }))} margin={{ top: 8, right: 8 }}>
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#1F2937' }} interval={0} angle={-45} textAnchor="end" height={60} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+            <Tooltip cursor={{ fill: '#F7F9FB' }} formatter={(v) => [fmtInt(v), 'Product ends']} />
+            <Bar
+              dataKey="count"
+              fill="#6DA544"
+              radius={[4, 4, 0, 0]}
+              cursor="pointer"
+              onClick={(d) => {
+                const mo = forecast.months.find((x) => x.key === d?.key)
+                if (mo?.rows.length) openDrilldown(`ERC renewals, ${mo.label}: ${fmtInt(mo.rows.length)}`, mo.rows, forecastCols)
+              }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="text-sm font-semibold text-ink mb-1">Product Roll-off</h2>
         <p className="text-xs text-muted mb-4">
-          Sorted soonest first: red within 30 days, amber within 90, green beyond
+          Product end date (the ERC Date), upcoming only, soonest first: red within 30 days, amber within 90, green beyond
         </p>
         <DataTable
           columns={[
             { key: 'client_name', label: 'Client' },
             {
-              key: 'mortgage_product_roll_off_date',
-              label: 'Roll-off Date',
-              render: (r) => <ErcChip date={r.mortgage_product_roll_off_date} />,
-              sortValue: (r) => parseDate(r.mortgage_product_roll_off_date)?.getTime() ?? Infinity,
+              key: '__productEnd',
+              label: 'Product End Date (ERC)',
+              render: (r) => <ErcChip date={r.__productEnd} />,
+              sortValue: (r) => parseDate(r.__productEnd)?.getTime() ?? Infinity,
             },
             { key: 'admin', label: 'Admin' },
             { key: 'client_relationship_status', label: 'Relationship' },
