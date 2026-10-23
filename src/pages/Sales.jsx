@@ -91,7 +91,7 @@ export default function Sales() {
         return {
           ...lead,
           ...a,
-          client_name: lead.client_name || DASH,
+          client_name: lead.client_name || a.contact_name || DASH, // a contact with no case in Leads still has its name on the appointment
           advisor_name: a.advisor, // the drill-down's advisor filter reads this
           booked_on: booked ? fmtDate(booked) : DASH,
           appointment_on: starts ? `${fmtDate(starts)} ${starts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : DASH,
@@ -383,7 +383,7 @@ export default function Sales() {
                 const lead = leadByContact.get(a.contact_id) || {}
                 const starts = parseDate(a.start_time)
                 return {
-                  ...lead, ...a, client_name: lead.client_name || DASH, advisor_name: a.advisor,
+                  ...lead, ...a, client_name: lead.client_name || a.contact_name || DASH, advisor_name: a.advisor,
                   booker: bookerOf(a), appointment_on: starts ? starts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : DASH,
                   status_label: STATUS_LABEL[a.status] || a.status || DASH,
                 }
@@ -415,8 +415,8 @@ export default function Sales() {
       <div className="card p-5">
         <h2 className="text-sm font-semibold text-ink">Advisor calls against appointments</h2>
         <p className="text-xs text-muted mt-0.5 mb-4 max-w-3xl">
-          Advisor appointments are phone calls made from Evonex, so a connected call by the advisor to the client within two hours of the appointment time is
-          the evidence it took place. The status staff marked on the calendar is never changed by this; where the two disagree it is flagged on the Flags page.
+          Advisor appointments are phone calls made from Evonex, so a connected call by the advisor to the client within three hours of the appointment time is
+          the evidence it took place (the advisor may have used another number, so a mismatch is something to review, not proof). The status staff marked on the calendar is never changed by this; where the two disagree it is flagged on the Flags page.
           Only appointments that finished at least two hours ago, and that fall inside the Evonex call history, are judged.
         </p>
         {callEvidence.length === 0 ? (

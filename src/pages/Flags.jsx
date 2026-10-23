@@ -10,13 +10,16 @@ import { FIELD_LABEL, FLAG_TYPES, flagValues, typeLabel } from '../lib/flags'
 
 
 export default function Flags() {
-  const { loading, flags, allRows, dateRange, customRange, openDrilldown } = useData()
+  const { loading, flags, allRows, appointments, dateRange, customRange, openDrilldown } = useData()
 
   const leadByContact = useMemo(() => {
     const map = new Map()
     for (const r of allRows) if (r.contact_id && !map.has(r.contact_id)) map.set(r.contact_id, r)
     return map
   }, [allRows])
+
+  // The client's name from the appointment, for contacts that have no case in Leads.
+  const nameByContact = useMemo(() => new Map(appointments.filter((a) => a.contact_id && a.contact_name).map((a) => [a.contact_id, a.contact_name])), [appointments])
 
   const rows = useMemo(() => {
     const b = rangeBounds(dateRange, customRange)
@@ -37,7 +40,7 @@ export default function Flags() {
           was: shown.was,
           now: shown.now,
           official: shown.official,
-          client_name: lead.client_name || DASH,
+          client_name: lead.client_name || nameByContact.get(f.contact_id) || DASH,
           detected_on: detected ? `${fmtDate(detected)} ${detected.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : DASH,
           type_label: typeLabel(f.type),
           field_label: FIELD_LABEL[f.field] || f.field || DASH,
@@ -45,7 +48,7 @@ export default function Flags() {
         }
       })
       .sort((a, b) => String(b.detected_at).localeCompare(String(a.detected_at)))
-  }, [flags, leadByContact, dateRange, customRange])
+  }, [flags, leadByContact, nameByContact, dateRange, customRange])
 
   const open = rows.filter((r) => r.status === 'open')
   const count = (group) => open.filter((r) => r.group === group)

@@ -14,9 +14,9 @@ export const FLAG_TYPES = {
   appointment_with_non_advisor: { label: 'Appointment given to a non-advisor', group: 'advisor' },
   booking_source_not_trusted: { label: 'New booking source', group: 'source' },
   booker_not_owner: { label: 'Booked by someone other than the lead owner', group: 'booked' },
-  showed_without_call: { label: 'Marked Showed, no advisor call', group: 'calls' },
-  noshow_with_call: { label: 'Marked No-show, but the advisor spoke to the client', group: 'calls' },
-  unmarked_with_call: { label: 'Advisor call held, appointment not marked', group: 'calls' },
+  showed_without_call: { label: 'Marked Showed, no advisor call found (to review)', group: 'calls' },
+  noshow_with_call: { label: 'Marked No-show, advisor spoke to the client (to review)', group: 'calls' },
+  unmarked_with_call: { label: 'Advisor call held, appointment not marked (to review)', group: 'calls' },
 }
 
 // What the Was / Now / Official columns mean differs by flag, so each type shows its own meaning:
