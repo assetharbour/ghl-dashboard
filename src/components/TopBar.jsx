@@ -6,6 +6,7 @@ import DateRangePicker from './DateRangePicker'
 
 const TITLES = {
   '/': 'Overview',
+  '/leadership': 'Leadership',
   '/leads': 'Leads Received',
   '/introducers': 'Introducer Reports',
   '/advisors': 'Advisor Performance',
@@ -20,6 +21,7 @@ const TITLES = {
 const DATE_BASIS = {
   '/sales': 'booked date or appointment date (choose on the page)',
   '/flags': 'date flagged',
+  '/leadership': 'lead created date (appointments by booked date)',
 }
 const DEFAULT_BASIS = 'lead created date'
 

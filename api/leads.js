@@ -81,7 +81,7 @@ function dropColumns(values) {
 
 async function load() {
   const sheetId = process.env.GOOGLE_SHEET_ID
-  const [leads, log, appointments, flags, locks, callEvidence, callActivity] = await Promise.all([
+  const [leads, log, appointments, flags, locks, callEvidence, callActivity, leadSpeed] = await Promise.all([
     readTab(sheetId, 'Leads'),
     readTab(sheetId, 'Sync_Log'),
     readOptionalTab(sheetId, 'Appointments'),
@@ -89,6 +89,7 @@ async function load() {
     readOptionalTab(sheetId, 'Field_Locks'),
     readOptionalTab(sheetId, 'Call_Evidence'),
     readOptionalTab(sheetId, 'Call_Activity'),
+    readOptionalTab(sheetId, 'Lead_Speed'),
   ])
   // The dashboard only needs the newest Sync_Log row (for "Updated X min ago").
   return {
@@ -100,6 +101,7 @@ async function load() {
     // Ids, staff names, durations and counts only: the sync never writes a phone number into these tabs.
     callEvidence,
     callActivity,
+    leadSpeed,
   }
 }
 

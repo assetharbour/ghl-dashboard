@@ -15,6 +15,7 @@ const LOG = [['timestamp', 'records_processed', 'status'], ['t1', '1', 'success'
 const APPTS = [['appointment_id', 'contact_id'], ['e1', 'c1']]
 const EVIDENCE = [['appointment_id', 'result'], ['e1', 'long_call']]
 const ACTIVITY = [['day', 'caller', 'calls'], ['2026-10-21', 'Joe Nicholls', '3']]
+const SPEED = [['opportunity_id', 'minutes_to_first_call'], ['o1', '4.5']]
 const LOCKS = [
   ['contact_id', 'field', 'first_value', 'first_seen_at', 'current_value', 'current_seen_at'],
   ['c1', 'created_by', 'Ava Morris-Boundy', 't', 'Ava Morris-Boundy', 't'],
@@ -55,7 +56,7 @@ async function call(headers = { authorization: basic(USER, PASS) }, method = 'GE
 beforeEach(() => {
   vi.resetModules()
   requests = []
-  sheets = { Leads: LEADS, Sync_Log: LOG, Appointments: APPTS, Flags: [['flag_id'], ['f1']], Field_Locks: LOCKS, Call_Evidence: EVIDENCE, Call_Activity: ACTIVITY }
+  sheets = { Leads: LEADS, Sync_Log: LOG, Appointments: APPTS, Flags: [['flag_id'], ['f1']], Field_Locks: LOCKS, Call_Evidence: EVIDENCE, Call_Activity: ACTIVITY, Lead_Speed: SPEED }
   process.env.DASHBOARD_AUTH_USER = USER
   process.env.DASHBOARD_AUTH_PASS = PASS
   process.env.GOOGLE_SHEET_ID = 'sheet'
@@ -125,6 +126,7 @@ describe('what leaves the server', () => {
     const r = await call()
     expect(r.body.callEvidence).toEqual(EVIDENCE)
     expect(r.body.callActivity).toEqual(ACTIVITY)
+    expect(r.body.leadSpeed).toEqual(SPEED)
   })
 })
 
@@ -135,6 +137,7 @@ describe('resilience', () => {
     delete sheets.Field_Locks
     delete sheets.Call_Evidence
     delete sheets.Call_Activity
+    delete sheets.Lead_Speed
     const r = await call()
     expect(r.code).toBe(200)
     expect(r.body.appointments).toEqual([])
@@ -142,6 +145,7 @@ describe('resilience', () => {
     expect(r.body.locks).toEqual([])
     expect(r.body.callEvidence).toEqual([])
     expect(r.body.callActivity).toEqual([])
+    expect(r.body.leadSpeed).toEqual([])
     expect(r.body.leads).toHaveLength(2)
   })
 
@@ -152,7 +156,7 @@ describe('resilience', () => {
     expect(first.headers['X-Leads-Cache']).toBe('miss')
     expect(second.headers['X-Leads-Cache']).toBe('hit')
     expect(requests.length).toBe(reads)
-    expect(reads).toBe(7)
+    expect(reads).toBe(8)
   })
 
   it('fails with 502 when Google is down and nothing is cached', async () => {

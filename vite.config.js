@@ -57,7 +57,7 @@ function localApi() {
           if (out.code === 200 && body && existsSync(snapshot)) {
             const snap = JSON.parse(readFileSync(snapshot, 'utf8'))
             // only fill what the real sheet does not have yet
-            for (const [key, snapKey] of [['appointments', 'appointments'], ['flags', 'flags'], ['locks', 'locks'], ['callEvidence', 'call_evidence'], ['callActivity', 'call_activity']]) {
+            for (const [key, snapKey] of [['appointments', 'appointments'], ['flags', 'flags'], ['locks', 'locks'], ['callEvidence', 'call_evidence'], ['callActivity', 'call_activity'], ['leadSpeed', 'lead_speed']]) {
               if (!body[key] || body[key].length === 0) body = { ...body, [key]: snap[snapKey] || [] }
             }
           }

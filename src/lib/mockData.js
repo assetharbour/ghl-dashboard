@@ -80,7 +80,7 @@ export function mockPayload(variant = '', now = Date.now()) {
   sample('c3', 'created_by_changed', 'created_by', 'Ava Morris-Boundy', 'Hugo Sharpe', 'Ava Morris-Boundy', '', 'changed after being set; reports keep the locked value', 5)
   sample('c9', 'booked_by_missing', 'booked_by', '', 'Harry Kalsi', 'Harry Kalsi', 'e9', 'booked in GHL but the Booked By field was never filled in (the calendar booker is used)', 30)
   sample('c14', 'booked_by_mismatch', 'booked_by', 'Harry Kalsi', 'Hugo Sharpe', 'Hugo Sharpe', 'e14', 'the Booked By field differs from the person the calendar says booked it', 52)
-  sample('c20', 'appointment_with_non_advisor', 'advisor', '', 'Anita Andrews', '', 'e20', 'round robin gave this appointment to someone who is not a listed advisor', 70)
+  sample('c20', 'appointment_with_non_advisor', 'advisor', '', 'Anita Andrews', '', 'e20', 'this appointment was booked with someone who is not a listed advisor', 70)
   sample('', 'booking_source_not_trusted', 'booked_source', '', 'booking_widget', '', '', 'appointments from this source use the Booked By field as the official booker', 90)
 
   if (variant === 'empty') {

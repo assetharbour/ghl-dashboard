@@ -20,6 +20,7 @@ async function fetchViaServer() {
     locksValues: data.locks || [],
     callEvidenceValues: data.callEvidence || [],
     callActivityValues: data.callActivity || [],
+    leadSpeedValues: data.leadSpeed || [],
   }
 }
 
@@ -36,7 +37,7 @@ function parseTable(values) {
 }
 
 export async function fetchDashboardData() {
-  const { leadsValues, logValues, appointmentsValues, flagsValues, locksValues, callEvidenceValues, callActivityValues } = await fetchViaServer()
+  const { leadsValues, logValues, appointmentsValues, flagsValues, locksValues, callEvidenceValues, callActivityValues, leadSpeedValues } = await fetchViaServer()
   const rows = parseTable(leadsValues)
   const lastLogRow = logValues.length > 1 ? logValues[logValues.length - 1] : null
   const lastSync = lastLogRow ? lastLogRow[0] : null
@@ -48,5 +49,6 @@ export async function fetchDashboardData() {
     locks: parseTable(locksValues),
     callEvidence: parseTable(callEvidenceValues || []),
     callActivity: parseTable(callActivityValues || []),
+    leadSpeed: parseTable(leadSpeedValues || []),
   }
 }

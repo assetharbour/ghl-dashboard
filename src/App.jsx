@@ -9,6 +9,7 @@ import Cases from './pages/Cases'
 import Gapping from './pages/Gapping'
 import Sales from './pages/Sales'
 import Flags from './pages/Flags'
+import Leadership from './pages/Leadership'
 import UnderDevelopment from './pages/UnderDevelopment'
 
 // Temporary — client requested these pages gated behind a placeholder
@@ -20,6 +21,7 @@ const PAGES_UNDER_DEVELOPMENT = []
 
 const ROUTES = [
   { key: 'overview', path: '/', label: 'Overview', Component: Overview },
+  { key: 'leadership', path: '/leadership', label: 'Leadership', Component: Leadership },
   { key: 'leads', path: '/leads', label: 'Leads Received', Component: Leads },
   { key: 'introducers', path: '/introducers', label: 'Introducer Reports', Component: Introducers },
   { key: 'advisors', path: '/advisors', label: 'Advisor Performance', Component: Advisors },

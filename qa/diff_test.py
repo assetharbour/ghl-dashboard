@@ -51,7 +51,7 @@ def make_case(seed):
 
 def py_fair(case):
     start, end = case["period"] if case["period"] else (None, None)
-    return {r["person"]: [r["appointments"], r["share"], r["vs_equal"]] for r in sm.round_robin_fairness(case["appts"], ["Henny Lessey", "Joe Nicholls", "Xavier Collin", "Cecilia Szabo"], start=start, end=end)}
+    return {r["person"]: [r["appointments"], r["share"], None] for r in sm.advisor_distribution(case["appts"], ["Henny Lessey", "Joe Nicholls", "Xavier Collin", "Cecilia Szabo"], start=start, end=end)}
 
 
 def py_table(case, group):

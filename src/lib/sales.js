@@ -199,8 +199,11 @@ export function sumRows(rows) {
   }
 }
 
-/** Appointments per listed advisor against an equal share; `vsEqual` > 0 means more than their fair share. */
-export function roundRobinFairness(appointments, advisorNames, { start = null, end = null, dateField = 'booked_at' } = {}) {
+/**
+ * Appointments per listed advisor: who the appointments were booked WITH. Whoever books in GHL chooses the advisor (the calendar is not an
+ * automatic rotation), so this is a distribution, not a fairness check. `share` is the advisor's part of the listed advisors' total.
+ */
+export function advisorDistribution(appointments, advisorNames, { start = null, end = null, dateField = 'booked_at' } = {}) {
   const counts = new Map(advisorNames.map((n) => [n, 0]))
   let other = 0
   for (const a of appointments) {
@@ -210,14 +213,12 @@ export function roundRobinFairness(appointments, advisorNames, { start = null, e
     else other += 1
   }
   const total = [...counts.values()].reduce((a, b) => a + b, 0)
-  const share = advisorNames.length ? total / advisorNames.length : 0
   const rows = [...counts].map(([person, appointmentsCount]) => ({
     person,
     appointments: appointmentsCount,
     share: total ? appointmentsCount / total : null,
-    vsEqual: appointmentsCount - share,
   }))
-  if (other) rows.push({ person: '(not a listed advisor)', appointments: other, share: null, vsEqual: null })
+  if (other) rows.push({ person: '(not a listed advisor)', appointments: other, share: null })
   return rows
 }
 

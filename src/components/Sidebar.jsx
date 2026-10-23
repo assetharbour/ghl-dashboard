@@ -9,14 +9,16 @@ import {
   ShieldAlert,
   UserCheck,
   Flag,
+  Trophy,
   X,
 } from 'lucide-react'
 import logo from '../assets/assetharbour-logo.png'
 
-// Order follows the journey of a lead: the big picture, where leads come from, how the sales team works them (calls, then
+// Order follows the journey of a lead: the big picture (Overview, then the Leadership board), where leads come from, how the sales team works them (calls, then
 // appointments, then advisors), the casework after that, protection cross-sell, and data-quality flags last.
 const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
+  { to: '/leadership', label: 'Leadership', icon: Trophy },
   { to: '/leads', label: 'Leads Received', icon: Inbox },
   { to: '/introducers', label: 'Introducer Reports', icon: Users },
   { to: '/calls', label: 'Call Tracking', icon: Phone },
@@ -68,7 +70,7 @@ export default function Sidebar({ open, onClose }) {
             </NavLink>
           ))}
         </nav>
-        <div className="px-5 py-4 text-[11px] text-white/40 border-t border-white/10">
+        <div className="px-5 py-4 text-[11px] text-white/70 border-t border-white/10">
           Asset Harbour Mortgage
           <br />
           Reporting Dashboard

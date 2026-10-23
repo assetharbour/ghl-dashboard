@@ -47,7 +47,7 @@ and `api/leads.js` re-checks the same credentials itself.
 ## Sales Team and Flags pages
 
 * `/sales` (Sales Team): appointments booked, showed, no-shows, cancelled, rebooked, full fact finds, completed, and the two
-  conversion rates per sales rep (booked -> full fact find, booked -> completed), per advisor, per week, the round-robin split,
+  conversion rates per sales rep (booked -> full fact find, booked -> completed), per advisor, per week, appointments per advisor,
   the next working week, full fact finds by month, leads added per locked Created By, and the appointment list. The date range
   (top right) applies to the day each appointment was **booked**. Weekly and monthly presets (This week, Last week, This month,
   Last month) were added to the shared date range and work on every page.
@@ -64,3 +64,15 @@ and `api/leads.js` re-checks the same credentials itself.
 ## QA
 
 The 22 Oct 2026 QA report (approach, results, defect log, UAT checklist, residual risks, how to repeat) is `../ghl-reporting-sync/docs/qa/QA_REPORT_2026-10-22.md`.
+
+## Leadership board (`/leadership`)
+
+One clean page for the people running the business, second in the sidebar. Headline cards (leads received, appointments booked, show rate, full fact
+finds, completions, revenue recorded), five "top of the board" honours (top booker, fastest first call, top advisor, top of handover, top introducer),
+leaderboards for the sales team, advisors and handover team, speed to lead, the lead-to-completion funnel, a 12-week trend, the top introducers and a
+"needs attention" strip. Logic and tests: `src/lib/leadership.js`, `src/lib/leadership.test.js`.
+
+Definitions: leads, introducers and the funnel are the leads CREATED in the date range; appointments are the S3 calendar BOOKED in the range (same as the Sales
+Team page); a completion is the Completion stage and is counted in the period it COMPLETED (completion date inside the range, every one for All time), so a case that
+completes this month counts this month whatever its age; revenue counts only recorded fees. Speed to lead (from the `Lead_Speed` tab) is shown per person only from three
+first calls; nobody is named a winner with a zero. Cases owned by people outside the four handover admins are not ranked.

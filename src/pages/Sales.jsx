@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Info } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
@@ -22,7 +22,7 @@ import {
   isDue,
   lastMonths,
   namesMatch,
-  roundRobinFairness,
+  advisorDistribution,
   startsInFuture,
   sumRows,
   weeklyBookings,
@@ -147,8 +147,7 @@ export default function Sales() {
     () => weeklyBookings(bookerAppts.filter((a) => a.status === 'noshow'), bookerOf, { start, end, dateField }),
     [bookerAppts, start, end, dateField]
   )
-  const fairness = useMemo(() => roundRobinFairness(scoped, ADVISORS, { start, end, dateField }), [scoped, start, end, dateField])
-  const equalShare = fairness.length ? fairness.reduce((t, r) => t + r.appointments, 0) / ADVISORS.length : 0
+  const distribution = useMemo(() => advisorDistribution(scoped, ADVISORS, { start, end, dateField }), [scoped, start, end, dateField])
   const ahead = useMemo(() => forwardWeek(scoped, now), [scoped, now])
   const months = useMemo(() => lastMonths(now, 6), [now])
   const ffByAdvisor = useMemo(() => fullFactFindsByMonth(scoped, contacts, now, (a) => a.advisor || UNKNOWN, months), [scoped, contacts, now, months])
@@ -338,15 +337,14 @@ export default function Sales() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*]:min-w-0">
         <ChartCard
-          title="Round robin: appointments per advisor"
-          subtitle={`Bookings in the period against an equal share (${equalShare.toFixed(1)} each). Bars far from the line are an unfair split`}
+          title="Appointments per advisor"
+          subtitle="Who the appointments were booked with in the period. The person booking chooses the advisor."
         >
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={fairness} layout="vertical" margin={{ left: 8, right: 24 }}>
+            <BarChart data={distribution} layout="vertical" margin={{ left: 8, right: 24 }}>
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
               <YAxis type="category" dataKey="person" width={150} tick={{ fontSize: 11, fill: '#1F2937' }} />
               <Tooltip cursor={{ fill: '#F7F9FB' }} formatter={(v) => [fmtInt(v), 'Appointments']} />
-              <ReferenceLine x={equalShare} stroke="#E91E63" strokeDasharray="4 3" />
               <Bar dataKey="appointments" fill="#6DA544" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>

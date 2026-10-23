@@ -14,6 +14,7 @@ export function DataProvider({ children }) {
   // What the advisor's Evonex call looked like per appointment, and calls per day per caller (empty until CALL_EVIDENCE is on).
   const [callEvidence, setCallEvidence] = useState([])
   const [callActivity, setCallActivity] = useState([])
+  const [leadSpeed, setLeadSpeed] = useState([]) // minutes to the first call per new lead
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [dateRange, setDateRange] = useState('all')
@@ -24,7 +25,7 @@ export function DataProvider({ children }) {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setRefreshing(true)
     try {
-      const { rows, lastSync: sync, appointments: appts, flags: flagRows, locks: lockRows, callEvidence: evidenceRows, callActivity: activityRows } = await fetchDashboardData()
+      const { rows, lastSync: sync, appointments: appts, flags: flagRows, locks: lockRows, callEvidence: evidenceRows, callActivity: activityRows, leadSpeed: speedRows } = await fetchDashboardData()
       setAllRows(rows)
       setLastSync(sync)
       setAppointments(appts)
@@ -32,6 +33,7 @@ export function DataProvider({ children }) {
       setLocks(lockRows)
       setCallEvidence(evidenceRows || [])
       setCallActivity(activityRows || [])
+      setLeadSpeed(speedRows || [])
       setError(null)
     } catch (e) {
       console.error('Data fetch failed:', e)
@@ -73,6 +75,7 @@ export function DataProvider({ children }) {
       locks,
       callEvidence,
       callActivity,
+      leadSpeed,
       rows,
       lastSync,
       refreshing,
@@ -93,6 +96,7 @@ export function DataProvider({ children }) {
       locks,
       callEvidence,
       callActivity,
+      leadSpeed,
       rows,
       lastSync,
       error,

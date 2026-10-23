@@ -67,7 +67,7 @@ export default function Flags() {
     ['Open flags', open, 'Needs a manager to look'],
     ['Created By changed', count('created'), 'changed or cleared after being set'],
     ['Booked By issues', count('booked'), 'changed, cleared, missing or not matching the calendar'],
-    ['Advisor / round robin', count('advisor'), 'differs from the calendar or given to a non-advisor'],
+    ['Advisor checks', count('advisor'), 'differs from the advisor field, or booked with a non-advisor'],
     ['Calls vs calendar', count('calls'), 'status marked on the calendar disagrees with the phone records'],
     ['New booking sources', count('source'), 'a new way of booking appeared'],
   ]

@@ -4,7 +4,7 @@ process.env.TZ = 'Europe/London'
 
 import { describe, it, expect } from 'vitest'
 import {
-  buildSalesTable, sumRows, roundRobinFairness, contactInfoFromLeads, createdByReport,
+  buildSalesTable, sumRows, advisorDistribution, contactInfoFromLeads, createdByReport,
   isFullFactFind, namesMatch, weekStart, weeklyBookings, forwardWeek, SALES_TEAM, fullFactFindsByMonth, lastMonths, creditedAppointments,
 } from './sales'
 import { rangeBounds, filterByDateRange } from './metrics'
@@ -175,11 +175,12 @@ describe('helpers', () => {
     expect(Object.keys(info)).toEqual(['c1', 'c2', 'c3'])
   })
 
-  it('compares round robin against an equal share and reports non-advisors', () => {
+  it('counts appointments per advisor and reports non-advisors', () => {
     const appts = [...Array(6).keys()].map((i) => appt(`a${i}`, `c${i}`)).concat([appt('x', 'cx', { advisor: 'Xavier Collin' }), appt('y', 'cy', { advisor: 'Anita Andrews' })])
-    const t = byPerson(roundRobinFairness(appts, ['Joe Nicholls', 'Xavier Collin', 'Cecilia Szabo']))
+    const t = byPerson(advisorDistribution(appts, ['Joe Nicholls', 'Xavier Collin', 'Cecilia Szabo']))
     expect(t['Joe Nicholls'].appointments).toBe(6)
-    expect(t['Joe Nicholls'].vsEqual).toBeCloseTo(11 / 3, 10)
+    expect(t['Joe Nicholls'].share).toBeCloseTo(6 / 7, 10)
+    expect('vsEqual' in t['Joe Nicholls']).toBe(false)
     expect([t['Cecilia Szabo'].appointments, t['(not a listed advisor)'].appointments]).toEqual([0, 1])
   })
 
@@ -302,8 +303,8 @@ describe('date range basis: booked date or appointment date', () => {
     expect([held.booked, held.showed, held.upcoming]).toEqual([1, 1, 0]) // only a was held in October
   })
 
-  it('applies the same basis to round robin and the weekly chart', () => {
-    const rr = (dateField) => roundRobinFairness(appts, ['Joe Nicholls'], { ...october, dateField }).find((r) => r.person === 'Joe Nicholls').appointments
+  it('applies the same basis to the advisor distribution and the weekly chart', () => {
+    const rr = (dateField) => advisorDistribution(appts, ['Joe Nicholls'], { ...october, dateField }).find((r) => r.person === 'Joe Nicholls').appointments
     expect([rr('booked_at'), rr('start_time')]).toEqual([1, 1])
     const weeks = (dateField) => weeklyBookings(appts, (a) => a.booked_by_official, { ...october, dateField }).weeks.reduce((n, w) => n + w['Hugo Sharpe'], 0)
     expect([weeks('booked_at'), weeks('start_time')]).toEqual([1, 1])
