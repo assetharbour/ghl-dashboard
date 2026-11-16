@@ -6,13 +6,13 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDate, parseDate, displayValue } from '../lib/format'
-import { isMortgageCase, hasProtection, ADMIN_FILTER_PROPS } from '../lib/metrics'
+import { isGappingCase, hasProtection, ADMIN_FILTER_PROPS, GAPPING_FROM_STAGE } from '../lib/metrics'
 
 export default function Gapping() {
   const { rows, loading, openDrilldown } = useData()
 
   const m = useMemo(() => {
-    const mortgage = rows.filter(isMortgageCase)
+    const mortgage = rows.filter(isGappingCase)
     const unprotected = mortgage.filter((r) => !hasProtection(r))
     const protectedCases = mortgage.filter(hasProtection)
 
@@ -33,6 +33,7 @@ export default function Gapping() {
 
   const protectionCols = [
     { key: 'mortgage_case_type', label: 'Case Type' },
+    { key: 'pipeline_stage', label: 'Stage' },
     { key: 'protection_type', label: 'Protection Type' },
   ]
 
@@ -65,12 +66,12 @@ export default function Gapping() {
         <KPICard
           label="Gapping Rate"
           value={fmtPct(m.unprotected.length, m.mortgage.length)}
-          sub={`${fmtInt(m.mortgage.length)} mortgage cases total`}
+          sub={`${fmtInt(m.mortgage.length)} mortgage cases from ${GAPPING_FROM_STAGE} onwards`}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 [&>*]:min-w-0">
-        <ChartCard title="Mortgage to Protection" subtitle="click a segment to view records" className="lg:col-span-2">
+        <ChartCard title="Mortgage to Protection" subtitle={`Mortgage cases from ${GAPPING_FROM_STAGE} onwards. Click a segment to view records`} className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -105,12 +106,13 @@ export default function Gapping() {
           <div className="card p-5 lg:col-span-3">
             <h2 className="text-sm font-semibold text-ink mb-1">Gapping Work List</h2>
             <p className="text-xs text-muted mb-4">
-              Unprotected mortgage cases, most recent completions first (warmest cross-sell)
+              Unprotected mortgage cases from {GAPPING_FROM_STAGE} onwards, most recent completions first (warmest cross-sell)
             </p>
             <DataTable
               columns={[
                 { key: 'client_name', label: 'Client' },
                 { key: 'mortgage_case_type', label: 'Case Type' },
+                { key: 'pipeline_stage', label: 'Stage' },
                 {
                   key: 'completion_date',
                   label: 'Completed',

@@ -113,6 +113,17 @@ export function isMortgageCase(row) {
   return !isBlank(row.mortgage_case_type)
 }
 
+// The Gapping report only counts mortgage cases that have reached Application
+// Submitted or a later stage (Anita, 12 Nov 2026): earlier stages such as Lead
+// Received, Client Contacted or Docs Requested are not viable yet. Uses the
+// pipeline stage rather than case_status, which can say "won" too early.
+// Lost cases have no position in STAGE_ORDER, so they are left out too.
+export const GAPPING_FROM_STAGE = 'Application Submitted'
+
+export function isGappingCase(row) {
+  return isMortgageCase(row) && stageAtOrBeyond(row, GAPPING_FROM_STAGE)
+}
+
 export function hasProtection(row) {
   return parseBool(row.has_protection)
 }

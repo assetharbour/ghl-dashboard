@@ -139,3 +139,19 @@ describe('personColor', () => {
     expect(personColor('Sarah Bennett', 1)).toBe(PALETTE[1])
   })
 })
+
+import { isGappingCase } from './metrics'
+describe('isGappingCase', () => {
+  const c = (pipeline_stage, mortgage_case_type = 'Remortgage') => ({ pipeline_stage, mortgage_case_type })
+  it('counts mortgage cases from Application Submitted onwards', () => {
+    for (const s of ['Application Submitted', 'Lender Processing', 'Offer Issued', 'Exchange', 'Completion', 'Post Completion']) {
+      expect(isGappingCase(c(s))).toBe(true)
+    }
+  })
+  it('leaves out early stages, lost cases and non mortgage cases', () => {
+    for (const s of ['Lead Received', 'Client Contacted', 'Docs Requested', 'Solicitor / Application Prep', 'Lost', '']) {
+      expect(isGappingCase(c(s))).toBe(false)
+    }
+    expect(isGappingCase(c('Completion', ''))).toBe(false)
+  })
+})
