@@ -37,6 +37,18 @@ export const STAGE_ORDER = [
 
 export const CHART_COLORS = ['#6DA544', '#2E3A48', '#94C973', '#5B7B94', '#C7DDB5', '#8896A6']
 
+// Fixed colours for the sales team so each person is easy to tell apart
+// (requested by Sara, 13 Nov 2026: the greens were too close together).
+// Matched on first name so 'Ava Morris-Boundy' and 'Ava' both work.
+export const PERSON_COLORS = { ava: '#E91E63', harry: '#F5C518', hugo: '#2F80ED' }
+
+// Colour for a person in a per-person chart: their fixed colour if they have
+// one, otherwise the next palette colour by position.
+export function personColor(name, i) {
+  const first = String(name || '').trim().split(/\s+/)[0].toLowerCase()
+  return PERSON_COLORS[first] || CHART_COLORS[i % CHART_COLORS.length]
+}
+
 // The only 4 people GHL's own workflows ever assign as contact owner:
 // "WF - S1 Lead Intake" sets Anita Andrews at Stage 1; "WF – S6 Docs
 // Received Handler" reassigns to Ben Robertson / Lewis Flude / Alison

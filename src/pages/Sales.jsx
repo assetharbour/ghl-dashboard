@@ -7,7 +7,7 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { DASH, fmtDate, fmtInt, parseDate } from '../lib/format'
-import { CHART_COLORS, rangeBounds } from '../lib/metrics'
+import { personColor, rangeBounds } from '../lib/metrics'
 import {
   ADVISORS,
   SALES_TEAM,
@@ -315,7 +315,7 @@ export default function Sales() {
               <Tooltip cursor={{ fill: '#F7F9FB' }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               {weekly.people.map((p, i) => (
-                <Bar key={p} dataKey={p} stackId="w" fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Bar key={p} dataKey={p} stackId="w" fill={personColor(p, i)} />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -328,7 +328,7 @@ export default function Sales() {
               <Tooltip cursor={{ fill: '#F7F9FB' }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               {noShowWeekly.people.map((p, i) => (
-                <Bar key={p} dataKey={p} stackId="n" fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Bar key={p} dataKey={p} stackId="n" fill={personColor(p, i)} />
               ))}
             </BarChart>
           </ResponsiveContainer>

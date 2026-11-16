@@ -127,3 +127,15 @@ describe('ERC renewal forecast', () => {
     expect(ercForecast([{ contact_id: 'z', erc_date: '', mortgage_product_roll_off_date: '2027-02-02' }], now).total).toBe(1)
   })
 })
+
+import { personColor, PERSON_COLORS, CHART_COLORS as PALETTE } from './metrics'
+describe('personColor', () => {
+  it('gives Ava pink, Harry yellow and Hugo blue whatever their position', () => {
+    expect(personColor('Ava Morris-Boundy', 0)).toBe(PERSON_COLORS.ava)
+    expect(personColor('Harry Kalsi', 5)).toBe(PERSON_COLORS.harry)
+    expect(personColor('hugo sharpe', 2)).toBe(PERSON_COLORS.hugo)
+  })
+  it('falls back to the palette for everyone else', () => {
+    expect(personColor('Sarah Bennett', 1)).toBe(PALETTE[1])
+  })
+})
