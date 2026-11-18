@@ -71,7 +71,55 @@ export function rank(rows, primary, secondary = () => 0) {
 
 // ------------------------------------------------------------------------------------------------------ speed to lead
 
+// The office hours the response clock runs in (Andrew, 18 Nov 2026: 09:00 to 17:00), Monday to Friday, UK time. Only time
+// while the office is open counts: a lead that arrives at 16:30 and is called at 09:30 the next working day waited one hour,
+// not seventeen, and a lead that arrives overnight or at the weekend is not late until the office opens. A call made while
+// the office is closed, before it opens for that lead, counts as an immediate response. Bank holidays count as working days.
+export const OFFICE_HOURS = { start: 9, end: 17, timeZone: 'Europe/London' }
+export const OFFICE_MINUTES_PER_DAY = (OFFICE_HOURS.end - OFFICE_HOURS.start) * 60
+
+const londonParts = new Intl.DateTimeFormat('en-GB', {
+  timeZone: OFFICE_HOURS.timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+})
+const parts = (ms) => Object.fromEntries(londonParts.formatToParts(new Date(ms)).map((p) => [p.type, Number(p.value)]))
+/** The UTC instant of hh:00 UK time on a UK calendar day (offset taken at that moment, so British Summer Time is handled). */
+function ukTime(y, m, d, h) {
+  const guess = Date.UTC(y, m - 1, d, h)
+  const p = parts(guess)
+  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - guess
+  return guess - offset
+}
+
+/** Minutes between two instants that fall inside office hours (0 when `to` is not after `from`). */
+export function officeMinutesBetween(from, to) {
+  const a = from instanceof Date ? from.getTime() : parseDate(from)?.getTime()
+  const b = to instanceof Date ? to.getTime() : parseDate(to)?.getTime()
+  if (a === undefined || b === undefined || Number.isNaN(a) || Number.isNaN(b) || b <= a) return 0
+  let total = 0
+  const first = parts(a)
+  let day = Date.UTC(first.year, first.month - 1, first.day) // a UK calendar day, walked one day at a time
+  for (let guard = 0; guard < 400; guard++) {
+    const d = new Date(day)
+    const [y, m, dd] = [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()]
+    const open = ukTime(y, m, dd, OFFICE_HOURS.start)
+    if (open >= b) break
+    const weekday = d.getUTCDay() // the calendar day itself, so UTC weekday is right
+    if (weekday !== 0 && weekday !== 6) {
+      const close = ukTime(y, m, dd, OFFICE_HOURS.end)
+      total += Math.max(0, Math.min(close, b) - Math.max(open, a))
+    }
+    day += 86400000
+  }
+  return Math.round(total / 6000) / 10
+}
+
 const minutesOf = (r, field) => (isBlank(r[field]) ? null : Number(r[field]))
+
+/** Office minutes from the lead's creation to a call; the stored minutes only when either time is missing. */
+function speedMinutes(r, atField, minutesField) {
+  if (!isBlank(r.created_at) && !isBlank(r[atField]) && parseDate(r.created_at) && parseDate(r[atField])) return officeMinutesBetween(r.created_at, r[atField])
+  return minutesOf(r, minutesField)
+}
 
 /**
  * Speed to lead for leads created in [start, end). `speedRows` is the Lead_Speed tab. Leads still inside their first hour
@@ -84,8 +132,8 @@ export function speedSummary(speedRows, start = null, end = null, salesTeam = SA
   })
   const judged = inRange.filter((r) => r.status === 'called' || r.status === 'not_called')
   const called = judged.filter((r) => r.status === 'called')
-  const minutes = called.map((r) => minutesOf(r, 'minutes_to_first_call')).filter((m) => m !== null)
-  const connectMinutes = called.map((r) => minutesOf(r, 'minutes_to_first_connect')).filter((m) => m !== null)
+  const minutes = called.map((r) => speedMinutes(r, 'first_call_at', 'minutes_to_first_call')).filter((m) => m !== null)
+  const connectMinutes = called.map((r) => speedMinutes(r, 'first_connect_at', 'minutes_to_first_connect')).filter((m) => m !== null)
 
   const buckets = SPEED_BUCKETS.map((b, i) => {
     const low = i ? SPEED_BUCKETS[i - 1].max : -Infinity
@@ -97,7 +145,7 @@ export function speedSummary(speedRows, start = null, end = null, salesTeam = SA
   for (const r of called) {
     const name = r.first_call_by || UNKNOWN
     if (!callers.has(name)) callers.set(name, [])
-    callers.get(name).push(minutesOf(r, 'minutes_to_first_call'))
+    callers.get(name).push(speedMinutes(r, 'first_call_at', 'minutes_to_first_call'))
   }
   const byCaller = [...callers.entries()]
     .map(([name, list]) => ({
@@ -126,12 +174,14 @@ export function speedSummary(speedRows, start = null, end = null, salesTeam = SA
   }
 }
 
+/** Office time for people: minutes, then office hours, then working days of OFFICE_MINUTES_PER_DAY. */
 export function fmtMinutes(m) {
   if (m === null || m === undefined || !Number.isFinite(m)) return '—'
   if (m < 1) return '<1 min'
   if (m < 60) return `${Math.round(m)} min`
-  if (m < 60 * 24) return `${(m / 60).toFixed(m < 600 ? 1 : 0)} h`
-  return `${(m / 1440).toFixed(1)} days`
+  if (m < OFFICE_MINUTES_PER_DAY) return `${(m / 60).toFixed(1)} h`
+  const days = m / OFFICE_MINUTES_PER_DAY
+  return `${days.toFixed(1)} working day${days.toFixed(1) === '1.0' ? '' : 's'}`
 }
 
 // ---------------------------------------------------------------------------------------------------------- the boards

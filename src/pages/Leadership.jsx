@@ -10,7 +10,7 @@ import { DASH, fmtInt, fmtCurrency, fmtDate, fmtDays, parseDate } from '../lib/f
 import { isAwaitingClientResponse, isStuck, productEndDate, rangeBounds } from '../lib/metrics'
 import { contactInfoFromLeads } from '../lib/sales'
 import {
-  MIN_LEADS_FOR_SPEED, REVENUE_DUE_FROM_STAGE, adminBoard, advisorBoard, completedInRange, fmtMinutes, funnel, headline, honours, introducerBoard, isRevenueGap, salesBoard, speedSummary, weeklyTrend,
+  MIN_LEADS_FOR_SPEED, OFFICE_HOURS, OFFICE_MINUTES_PER_DAY, REVENUE_DUE_FROM_STAGE, adminBoard, advisorBoard, completedInRange, fmtMinutes, funnel, headline, honours, introducerBoard, isRevenueGap, salesBoard, speedSummary, weeklyTrend,
 } from '../lib/leadership'
 
 const GREEN = '#6DA544'
@@ -18,6 +18,7 @@ const NAVY = '#2E3A48'
 const PINK = '#E91E63'
 const SPEED_COLORS = ['#6DA544', '#94C973', '#C7DDB5', '#F2A93B', PINK]
 
+const pad = (h) => String(h).padStart(2, '0')
 const pct = (r) => (r === null || r === undefined ? DASH : `${(r * 100).toFixed(r > 0 && r < 0.1 ? 1 : 0)}%`)
 const money = (v) => fmtCurrency(v)
 
@@ -281,8 +282,9 @@ export default function Leadership() {
         <div className="card p-5 lg:col-span-3">
           <h2 className="text-sm font-semibold text-ink">Speed to lead</h2>
           <p className="text-xs text-muted mt-0.5 mb-4 max-w-2xl">
-            How long a new lead waits for its first call. The clock starts when the office opens (08:00 to 18:00, Monday to Friday), so a lead that arrives overnight
-            is not marked late. Existing clients are left out. Counts Evonex calls made since call tracking began.
+            How long a new lead waits for its first call, counting only office time ({pad(OFFICE_HOURS.start)}:00 to {pad(OFFICE_HOURS.end)}:00, Monday to Friday). A lead that
+            arrives at 16:30 and is called at 09:30 the next working day waited one hour. A working day is {OFFICE_MINUTES_PER_DAY / 60} office hours. Bank holidays count as
+            working days. Existing clients are left out. Counts Evonex calls made since call tracking began.
           </p>
           {m.speed.leads === 0 ? (
             <p className="text-sm text-muted py-8 text-center">No new leads with call data in this period yet.</p>

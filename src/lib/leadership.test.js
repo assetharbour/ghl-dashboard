@@ -3,7 +3,7 @@ process.env.TZ = 'Europe/London'
 import { describe, it, expect } from 'vitest'
 import {
   median, rank, completedInRange, speedSummary, fmtMinutes, salesBoard, advisorBoard, adminBoard, introducerBoard, funnel, weeklyTrend, headline, honours,
-  MIN_LEADS_FOR_SPEED, HANDOVER_ADMINS, isRevenueGap, REVENUE_DUE_FROM_STAGE,
+  MIN_LEADS_FOR_SPEED, HANDOVER_ADMINS, officeMinutesBetween, isRevenueGap, REVENUE_DUE_FROM_STAGE,
 } from './leadership'
 import { contactInfoFromLeads } from './sales'
 
@@ -36,7 +36,7 @@ describe('small helpers', () => {
   })
 
   it('formats minutes for people', () => {
-    expect([null, 0.4, 4.6, 59.4, 90, 600, 1440, 3000].map(fmtMinutes)).toEqual(['—', '<1 min', '5 min', '59 min', '1.5 h', '10 h', '1.0 days', '2.1 days'])
+    expect([null, 0.4, 4.6, 59.4, 90, 479, 480, 600, 3000].map(fmtMinutes)).toEqual(['—', '<1 min', '5 min', '59 min', '1.5 h', '8.0 h', '1.0 working day', '1.3 working days', '6.3 working days'])
   })
 })
 
@@ -77,6 +77,29 @@ describe('speed to lead', () => {
     expect([hugo.leads, hugo.median, hugo.enough, hugo.onSalesTeam, hugo.withinFifteen]).toEqual([3, 4, true, true, 3])
     expect([ava.leads, ava.median, ava.enough, ava.onSalesTeam]).toEqual([2, 40, false, true])
     expect(MIN_LEADS_FOR_SPEED).toBe(3)
+  })
+
+  it('counts only office time (09:00 to 17:00 UK, Monday to Friday) from the lead arriving to the first call', () => {
+    const rows = [
+      speedRow({ created_at: '2026-10-20T15:30:00Z', first_call_at: '2026-10-21T08:30:00Z', first_connect_at: '' }), // Tue 16:30 BST -> Wed 09:30 BST: 60
+      speedRow({ created_at: '2026-10-23T15:00:00Z', first_call_at: '2026-10-26T09:10:00Z' }), // Fri 16:00 BST -> Mon 09:10 GMT (clocks went back): 70
+      speedRow({ created_at: '2026-10-21T19:00:00Z', first_call_at: '2026-10-21T20:00:00Z' }), // called the same evening, before opening: 0
+    ]
+    const s = speedSummary(rows)
+    expect(s.rows.map((r) => r.minutes_to_first_call)).toEqual(['4', '4', '4']) // the stored minutes are not used once both times exist
+    expect(s.buckets.map((b) => b.count)).toEqual([1, 0, 1, 1, 0]) // 0, 60 and 70 minutes
+    expect(s.median).toBe(60)
+  })
+
+  it('works out office minutes across days, weekends and the change to and from summer time', () => {
+    expect(officeMinutesBetween('2026-10-20T08:00:00Z', '2026-10-20T08:05:00Z')).toBe(5) // Tue 09:00 to 09:05 BST
+    expect(officeMinutesBetween('2026-10-20T06:00:00Z', '2026-10-20T09:00:00Z')).toBe(60) // 07:00 to 10:00 BST: only 09:00 onwards
+    expect(officeMinutesBetween('2026-10-20T16:30:00Z', '2026-10-20T20:00:00Z')).toBe(0) // after 17:00 BST
+    expect(officeMinutesBetween('2026-10-24T10:00:00Z', '2026-10-25T15:00:00Z')).toBe(0) // the weekend
+    expect(officeMinutesBetween('2026-10-23T15:00:00Z', '2026-10-27T09:00:00Z')).toBe(60 + 480 + 0) // Fri 16:00 BST to Tue 09:00 GMT
+    expect(officeMinutesBetween('2026-03-27T16:00:00Z', '2026-03-30T08:00:00Z')).toBe(60) // Fri 16:00 GMT to Mon 09:00 BST
+    expect(officeMinutesBetween('2026-10-20T10:00:00Z', '2026-10-20T09:00:00Z')).toBe(0) // backwards
+    expect(officeMinutesBetween('', '2026-10-20T09:00:00Z')).toBe(0)
   })
 
   it('copes with no rows', () => {
