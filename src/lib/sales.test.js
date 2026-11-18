@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildSalesTable, sumRows, advisorDistribution, contactInfoFromLeads, createdByReport,
   isFullFactFind, namesMatch, weekStart, weeklyBookings, forwardWeek, SALES_TEAM, fullFactFindsByMonth, lastMonths, creditedAppointments,
+  factFindStatuses, outcomeLabel, FF_STATUS,
 } from './sales'
 import { rangeBounds, filterByDateRange } from './metrics'
 import { flagValues } from './flags'
@@ -310,5 +311,49 @@ describe('date range basis: booked date or appointment date', () => {
     expect([weeks('booked_at'), weeks('start_time')]).toEqual([1, 1])
     const firstWeek = weeklyBookings(appts, (a) => a.booked_by_official, { ...october, dateField: 'start_time' }).weeks.find((w) => w['Hugo Sharpe'] === 1)
     expect(firstWeek.key).toBe('2026-09-28') // the week of 2 Oct 2026 starts Monday 28 Sep
+  })
+})
+
+describe('fact find status', () => {
+  it('labels every outcome the team can record', () => {
+    expect(['Full Fact Find Took Place - YES', 'Advice Given - YES', 'Review - YES', 'Annual Review - YES', 'Amendment - YES', 'Something Else - YES', '', null].map(outcomeLabel))
+      .toEqual(['Full fact find', 'Advice given', 'Review', 'Annual review', 'Amendment', 'Something Else', '', ''])
+  })
+
+  it('gives each appointment one status, with the contact outcome on its latest due appointment only', () => {
+    const appts = [
+      appt('ff', 'c1'),
+      appt('adv', 'c2'),
+      appt('ar', 'c3'),
+      appt('none', 'c4'),
+      appt('early', 'c5', { booked_at: '2026-10-01T09:00:00Z' }), appt('late', 'c5', { booked_at: '2026-10-06T09:00:00Z' }),
+      appt('ns', 'c6', { status: 'noshow' }),
+      appt('nsr', 'c7', { status: 'noshow', booked_at: '2026-10-01T09:00:00Z' }), appt('nsr2', 'c7', { booked_at: '2026-10-09T09:00:00Z', start_time: '2026-10-30T09:00:00Z', status: 'confirmed' }),
+      appt('can', 'c8', { status: 'cancelled' }),
+      appt('canr', 'c9', { status: 'cancelled', booked_at: '2026-10-01T09:00:00Z' }), appt('canr2', 'c9', { booked_at: '2026-10-02T09:00:00Z' }),
+      appt('up', 'c10', { start_time: '2026-10-30T09:00:00Z', status: 'confirmed' }),
+      appt('stale', 'c11', { status: 'confirmed' }),
+      appt('inv', 'c12', { status: 'invalid' }),
+      appt('del', 'c13', { deleted: 'TRUE' }),
+    ]
+    const contacts = {
+      c1: FULL, c2: ADVICE, c3: { fact_find_outcome: 'Annual Review - YES' }, c5: FULL, c9: { fact_find_outcome: 'Amendment - YES' },
+    }
+    const s = factFindStatuses(appts, contacts, NOW)
+    expect(Object.fromEntries(s)).toEqual({
+      ff: FF_STATUS.fullFactFind, adv: FF_STATUS.adviceGiven, ar: FF_STATUS.annualReview, none: FF_STATUS.noOutcome,
+      early: FF_STATUS.outcomeLater, late: FF_STATUS.fullFactFind,
+      ns: FF_STATUS.noShow, nsr: FF_STATUS.noShowRebooked, nsr2: FF_STATUS.upcoming,
+      can: FF_STATUS.cancelled, canr: FF_STATUS.cancelledRebooked, canr2: FF_STATUS.amendment,
+      up: FF_STATUS.upcoming, stale: FF_STATUS.notMarked, inv: FF_STATUS.invalid,
+    })
+  })
+
+  it('has exactly as many "Full fact find" statuses as the full fact find count', () => {
+    const appts = [appt('1', 'c1'), appt('2', 'c1', { booked_at: '2026-10-06T09:00:00Z' }), appt('3', 'c2', { status: 'noshow' }), appt('4', 'c3'), appt('5', 'c4', { status: 'cancelled' })]
+    const contacts = { c1: FULL, c2: FULL, c3: ADVICE, c4: FULL }
+    const statuses = [...factFindStatuses(appts, contacts, NOW).values()]
+    const counted = sumRows(buildSalesTable(appts, contacts, NOW)).fullFactFinds
+    expect(statuses.filter((x) => x === FF_STATUS.fullFactFind).length).toBe(counted)
   })
 })

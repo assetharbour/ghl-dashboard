@@ -114,6 +114,79 @@ export function creditedAppointments(appointments, contacts, now) {
   return { creditedFf, creditedCompleted }
 }
 
+// ----------------------------------------------------------------------------------------------------- fact find status
+// One status per appointment for the fact find report (Andrew, 18 Nov 2026): every outcome, not only Full Fact Find.
+// The Fact Find Outcome is stored per CONTACT, so, exactly as for the full fact find count, it belongs to the contact's
+// latest due appointment; an earlier appointment of the same contact shows that its outcome is on the later one. The
+// number of "Full fact find" statuses therefore always equals the Full fact finds figure.
+export const FF_STATUS = {
+  fullFactFind: 'Full fact find',
+  adviceGiven: 'Advice given',
+  review: 'Review',
+  annualReview: 'Annual review',
+  amendment: 'Amendment',
+  noOutcome: 'Showed, no outcome recorded',
+  outcomeLater: 'Outcome on a later appointment',
+  notMarked: 'Status not updated',
+  noShow: 'No-show',
+  noShowRebooked: 'No-show, rebooked',
+  cancelled: 'Cancelled',
+  cancelledRebooked: 'Cancelled, rebooked',
+  upcoming: 'Upcoming',
+  invalid: 'Invalid',
+}
+// The report lists the statuses in this order.
+export const FF_STATUS_ORDER = Object.values(FF_STATUS)
+
+const OUTCOME_PREFIX = [
+  ['full fact find', FF_STATUS.fullFactFind],
+  ['advice given', FF_STATUS.adviceGiven],
+  ['annual review', FF_STATUS.annualReview], // before "review", which it starts with
+  ['review', FF_STATUS.review],
+  ['amendment', FF_STATUS.amendment],
+]
+
+/** "Advice Given - YES" -> "Advice given". Blank stays blank; an unknown value is shown as written, without " - YES". */
+export function outcomeLabel(outcome) {
+  const text = String(outcome ?? '').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  const known = OUTCOME_PREFIX.find(([prefix]) => lower.startsWith(prefix))
+  return known ? known[1] : text.replace(/\s*-\s*yes$/i, '')
+}
+
+/** Map of appointment_id -> fact find status for every appointment that is not deleted. */
+export function factFindStatuses(appointments, contacts, now) {
+  const live = appointments.filter((a) => !isDeleted(a))
+  const latestBooking = new Map()
+  const latestDue = new Map()
+  for (const a of live) {
+    if (!a.contact_id) continue
+    const o = order(a)
+    if (!latestBooking.has(a.contact_id) || o > latestBooking.get(a.contact_id)) latestBooking.set(a.contact_id, o)
+    if (isDue(a, now) && (!latestDue.has(a.contact_id) || o > order(latestDue.get(a.contact_id)))) latestDue.set(a.contact_id, a)
+  }
+  const rebooked = (a) => Boolean(a.contact_id) && order(a) < latestBooking.get(a.contact_id)
+  const out = new Map()
+  for (const a of live) {
+    let status
+    if (a.status === 'invalid') status = FF_STATUS.invalid
+    else if (a.status === 'cancelled') status = rebooked(a) ? FF_STATUS.cancelledRebooked : FF_STATUS.cancelled
+    else if (startsInFuture(a, now)) status = FF_STATUS.upcoming
+    else {
+      const credited = a.contact_id && latestDue.get(a.contact_id)?.appointment_id === a.appointment_id
+      const outcome = credited ? outcomeLabel(contacts[a.contact_id]?.fact_find_outcome) : ''
+      if (outcome) status = outcome
+      else if (a.status === 'noshow') status = rebooked(a) ? FF_STATUS.noShowRebooked : FF_STATUS.noShow
+      else if (!credited && a.contact_id) status = FF_STATUS.outcomeLater
+      else if (a.status === 'showed') status = FF_STATUS.noOutcome
+      else status = FF_STATUS.notMarked // the time has passed but it is still New or Confirmed
+    }
+    out.set(a.appointment_id, status)
+  }
+  return out
+}
+
 /**
  * True when the appointment's date falls inside [start, end) (either bound may be null) and it is not deleted.
  * `dateField` picks which date the range applies to: 'booked_at' (the day it was booked, the default) or

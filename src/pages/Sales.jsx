@@ -17,6 +17,8 @@ import {
   contactInfoFromLeads,
   createdByReport,
   creditedAppointments,
+  factFindStatuses,
+  FF_STATUS_ORDER,
   forwardWeek,
   fullFactFindsByMonth,
   isDue,
@@ -82,6 +84,7 @@ export default function Sales() {
   // One row per appointment booked in the period, joined to the client (for the table and every drill-down).
   const detail = useMemo(() => {
     const { creditedFf, creditedCompleted } = creditedAppointments(appointments, contacts, now)
+    const ffStatus = factFindStatuses(appointments, contacts, now)
     return bookerAppts
       .filter((a) => bookedInPeriod(a, start, end, dateField))
       .map((a) => {
@@ -100,6 +103,8 @@ export default function Sales() {
           status_label: STATUS_LABEL[a.status] || a.status || DASH,
           full_ff: creditedFf.has(a.appointment_id) && isDue(a, now) ? 'Yes' : '',
           completed_label: creditedCompleted.has(a.appointment_id) && isDue(a, now) ? 'Yes' : '',
+          ff_status: ffStatus.get(a.appointment_id) || DASH,
+          case_stage: lead.pipeline_stage || DASH,
           __due: isDue(a, now),
           __upcoming: startsInFuture(a, now),
           __evidence: evidenceOf.get(a.appointment_id) || null,
@@ -117,10 +122,15 @@ export default function Sales() {
     { key: 'status_label', label: 'Status' },
     { key: 'advisor_call', label: 'Advisor call' },
     { key: 'advisor_talk', label: 'Talk time' },
-    { key: 'full_ff', label: 'Full fact find' },
-    { key: 'completed_label', label: 'Completed' },
+    { key: 'ff_status', label: 'Fact find status' }, // the drill-down's own Stage column shows the case stage
   ]
   const callSummary = useMemo(() => evidenceSummary(detail), [detail])
+  // How many appointments in the table have each fact find status, in the report's order (statuses with none are left out).
+  const statusCounts = useMemo(() => {
+    const counts = new Map()
+    for (const d of detail) counts.set(d.ff_status, (counts.get(d.ff_status) || 0) + 1)
+    return [...counts.entries()].sort((a, b) => FF_STATUS_ORDER.indexOf(a[0]) - FF_STATUS_ORDER.indexOf(b[0]))
+  }, [detail])
   // Calls per appointment booked always uses the BOOKED date, whichever date the range is filtering.
   const bookedByPerson = useMemo(
     () => Object.fromEntries(buildSalesTable(appointments.filter(isSalesTeamBooker), contacts, now, { start, end, group: 'booker', salesTeam: SALES_TEAM }).map((r) => [r.person, r.booked])),
@@ -168,10 +178,10 @@ export default function Sales() {
     { key: 'rebooked', label: 'Rebooked' },
     { key: 'upcoming', label: 'Upcoming' },
     { key: 'fullFactFinds', label: 'Full fact finds' },
-    { key: 'completed', label: 'Completed' },
+    { key: 'completed', label: 'Mortgages completed' },
     { key: 'showRatePct', label: 'Show rate' },
     { key: 'conversionPct', label: 'Booked → full fact find' },
-    { key: 'completionPct', label: 'Booked → completed' },
+    { key: 'completionPct', label: 'Booked → mortgage completed' },
   ]
   const withPct = (table) =>
     table.map((r) => ({
@@ -270,13 +280,13 @@ export default function Sales() {
           onClick={() => drill('Appointments due (the conversion denominator)', (d) => d.__due)}
         />
         <KPICard
-          label="Completed"
+          label="Mortgages completed"
           value={fmtInt(totals.completed)}
           sub="mortgage completed after booking"
-          onClick={() => drill('Completed', (d) => d.completed_label === 'Yes')}
+          onClick={() => drill('Mortgages completed', (d) => d.completed_label === 'Yes')}
         />
         <KPICard
-          label="Booked → completed"
+          label="Booked → mortgage completed"
           value={pct(totals.conversionToCompletion)}
           sub={`${fmtInt(totals.completed)} of ${fmtInt(totals.due)} appointments due`}
           onClick={() => drill('Appointments due (the conversion denominator)', (d) => d.__due)}
@@ -529,15 +539,36 @@ export default function Sales() {
         <Skeleton className="h-72" />
       ) : (
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-ink mb-4">{byAppointment ? 'Appointments held in the period' : 'Appointments booked in the period'}</h2>
+          <h2 className="text-sm font-semibold text-ink">{byAppointment ? 'Fact finds: appointments held in the period' : 'Fact finds: appointments booked in the period'}</h2>
+          <p className="text-xs text-muted mt-0.5 mb-3 max-w-3xl">
+            Every appointment with who booked it, the advisor, the case and its fact find status. The Fact Find Outcome is recorded once per client, so it shows on
+            the client&apos;s latest appointment that has taken place; an earlier appointment of the same client says the outcome is on a later one. Click a count to see
+            those appointments, or use the filters and export.
+          </p>
+          {statusCounts.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4" aria-label="Appointments by fact find status">
+              {statusCounts.map(([status, count]) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => drill(status, (d) => d.ff_status === status)}
+                  className="rounded-full border border-line bg-page px-3 py-1 text-xs text-ink hover:border-brand-green/60 transition-colors"
+                >
+                  {status} <span className="font-semibold">{fmtInt(count)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <DataTable
             pageSize={15}
-            exportName="appointments_booked"
+            exportName="fact_finds"
             initialSort={{ key: 'booked_on', dir: 'desc' }}
             filters={[
               { key: 'booker', label: 'Booked by' },
               { key: 'advisor', label: 'Advisor' },
-              { key: 'status_label', label: 'Status' },
+              { key: 'status_label', label: 'Appointment status' },
+              { key: 'ff_status', label: 'Fact find status' },
+              { key: 'case_stage', label: 'Case stage' },
             ]}
             columns={[
               { key: 'client_name', label: 'Client' },
@@ -548,12 +579,12 @@ export default function Sales() {
               { key: 'advisor', label: 'Advisor' },
               { key: 'mortgage_case_type', label: 'Case type' },
               { key: 'lead_source', label: 'Lead source' },
-              { key: 'status_label', label: 'Status' },
+              { key: 'status_label', label: 'Appointment status' },
               { key: 'advisor_call', label: 'Advisor call' },
               { key: 'advisor_talk', label: 'Talk time' },
+              { key: 'ff_status', label: 'Fact find status' },
               { key: 'fact_find_date', label: 'Fact find date', render: (r) => fmtDate(r.fact_find_date), sortValue: (r) => r.fact_find_date || '' },
-              { key: 'full_ff', label: 'Full fact find' },
-              { key: 'completed_label', label: 'Completed' },
+              { key: 'case_stage', label: 'Case stage' },
             ]}
             rows={detail}
           />
