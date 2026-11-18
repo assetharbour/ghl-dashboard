@@ -6,11 +6,11 @@ import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
-import { DASH, fmtInt, fmtCurrency, fmtDays, parseDate } from '../lib/format'
+import { DASH, fmtInt, fmtCurrency, fmtDate, fmtDays, parseDate } from '../lib/format'
 import { isAwaitingClientResponse, isStuck, productEndDate, rangeBounds } from '../lib/metrics'
 import { contactInfoFromLeads } from '../lib/sales'
 import {
-  MIN_LEADS_FOR_SPEED, adminBoard, advisorBoard, completedInRange, fmtMinutes, funnel, headline, honours, introducerBoard, salesBoard, speedSummary, weeklyTrend,
+  MIN_LEADS_FOR_SPEED, REVENUE_DUE_FROM_STAGE, adminBoard, advisorBoard, completedInRange, fmtMinutes, funnel, headline, honours, introducerBoard, isRevenueGap, salesBoard, speedSummary, weeklyTrend,
 } from '../lib/leadership'
 
 const GREEN = '#6DA544'
@@ -97,18 +97,34 @@ function Honour({ icon: Icon, label, winner, value, sub }) {
   )
 }
 
-function Tile({ to, label, value, sub, alert }) {
-  return (
-    <Link to={to} className="card px-4 py-3 hover:border-brand-green/50 transition-colors group flex items-start justify-between gap-3">
+/** A count that links to the page behind it (`to`) or opens the rows in the drill-down panel (`onClick`). */
+function Tile({ to, onClick, label, value, sub, alert }) {
+  const className = 'card px-4 py-3 hover:border-brand-green/50 transition-colors group flex items-start justify-between gap-3 text-left w-full'
+  const body = (
+    <>
       <div>
         <div className="kpi-label">{label}</div>
         <div className={`text-2xl font-semibold mt-1 ${alert && value > 0 ? 'text-brand-pink' : 'text-ink'}`}>{fmtInt(value)}</div>
         <div className="text-xs text-muted mt-0.5">{sub}</div>
       </div>
       <ArrowUpRight size={14} className="text-muted/50 group-hover:text-brand-green transition-colors mt-1 shrink-0" />
-    </Link>
+    </>
+  )
+  return onClick ? (
+    <button type="button" onClick={onClick} className={className}>{body}</button>
+  ) : (
+    <Link to={to} className={className}>{body}</Link>
   )
 }
+
+// What the revenue gap list shows beside the standard drill-down columns, so the team can see which fee is missing.
+const REVENUE_GAP_COLUMNS = [
+  { key: 'mortgage_case_type', label: 'Case type' },
+  { key: 'created_date', label: 'Created', render: (r) => fmtDate(r.created_date) },
+  { key: 'broker_fee', label: 'Broker fee' },
+  { key: 'expected_procuration_fee', label: 'Proc fee' },
+  { key: 'solicitor_commission', label: 'Solicitor commission' },
+]
 
 // -------------------------------------------------------------------------------------------------------------- page
 
@@ -141,6 +157,7 @@ export default function Leadership() {
       honours: honours({ sales, advisors, admins, introducers, speed }),
       stuck: rows.filter((r) => isStuck(r, now)),
       awaiting: rows.filter(isAwaitingClientResponse),
+      revenueGap: rows.filter(isRevenueGap),
       renewals: allRows.filter((r) => {
         const t = parseDate(productEndDate(r))?.getTime()
         return t !== undefined && t >= now.getTime() - 86400000 && t <= soon
@@ -385,8 +402,15 @@ export default function Leadership() {
 
       <section aria-label="Needs attention">
         <h2 className="text-sm font-semibold text-ink mb-3">Needs attention</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <Tile to="/cases" label="Stuck cases" value={m.stuck.length} sub="open 30+ days in the first stages" alert />
+          <Tile
+            onClick={() => openDrilldown(`No revenue recorded, ${REVENUE_DUE_FROM_STAGE} or later: ${fmtInt(m.revenueGap.length)}`, m.revenueGap, REVENUE_GAP_COLUMNS)}
+            label="No revenue recorded"
+            value={m.revenueGap.length}
+            sub={`${REVENUE_DUE_FROM_STAGE} or later`}
+            alert
+          />
           <Tile to="/cases" label="Awaiting client" value={m.awaiting.length} sub="documents still pending" />
           <Tile to="/cases" label="Renewals in 30 days" value={m.renewals.length} sub="product end date (ERC)" />
           <Tile to="/flags" label="Open flags" value={m.openFlags.length} sub="data checks to review" alert />

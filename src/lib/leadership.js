@@ -27,6 +27,16 @@ const sumBy = (rows, fn) => rows.reduce((t, r) => t + fn(r), 0)
 const revenueOf = (r) => (isBlank(r.total_revenue) || !Number.isFinite(Number(r.total_revenue)) ? 0 : Number(r.total_revenue))
 const isCompletion = (r) => r.pipeline_stage === 'Completion'
 
+// Revenue gap (Andrew, 18 Nov 2026): a case that has reached Application Submitted or any later stage should have its fee
+// recorded. Lost cases have no place in the stage order, so they never count. "No revenue" means total_revenue is blank:
+// the sync leaves it blank (not 0) when none of broker fee, procuration fee and solicitor commission is set, so a case
+// recorded as a confirmed zero is not flagged.
+export const REVENUE_DUE_FROM_STAGE = 'Application Submitted'
+
+export function isRevenueGap(r) {
+  return stageAtOrBeyond(r, REVENUE_DUE_FROM_STAGE) && isBlank(r.total_revenue)
+}
+
 /** A completed lead whose completion date is inside [start, end) (no range = every completed lead). */
 export function completedInRange(r, start = null, end = null) {
   if (!isCompletion(r)) return false

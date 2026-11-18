@@ -3,7 +3,7 @@ process.env.TZ = 'Europe/London'
 import { describe, it, expect } from 'vitest'
 import {
   median, rank, completedInRange, speedSummary, fmtMinutes, salesBoard, advisorBoard, adminBoard, introducerBoard, funnel, weeklyTrend, headline, honours,
-  MIN_LEADS_FOR_SPEED, HANDOVER_ADMINS,
+  MIN_LEADS_FOR_SPEED, HANDOVER_ADMINS, isRevenueGap, REVENUE_DUE_FROM_STAGE,
 } from './leadership'
 import { contactInfoFromLeads } from './sales'
 
@@ -265,5 +265,22 @@ describe('introducers, funnel, trend, headline and honours', () => {
 
   it('reuses the contact info the Sales page builds', () => {
     expect(contactInfoFromLeads([]).constructor).toBe(Object)
+  })
+})
+
+describe('revenue gap', () => {
+  it('flags cases at Application Submitted or later with no fee recorded, and nothing earlier, lost or already recorded', () => {
+    const cases = [
+      ['Docs Requested', '', false],
+      ['Solicitor / Application Prep', '', false],
+      [REVENUE_DUE_FROM_STAGE, '', true],
+      ['Offer Issued', '   ', true],
+      ['Completion', '', true],
+      ['Post Completion', '', true],
+      ['Offer Issued', '1200', false],
+      ['Offer Issued', '0', false], // a confirmed zero is recorded, not missing
+      ['Lost', '', false],
+    ]
+    for (const [stage, revenue, flagged] of cases) expect([stage, revenue, isRevenueGap(lead({ pipeline_stage: stage, total_revenue: revenue }))]).toEqual([stage, revenue, flagged])
   })
 })
