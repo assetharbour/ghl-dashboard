@@ -48,3 +48,29 @@ export function flagValues(f) {
 
 export const FIELD_LABEL = { appointment_status: 'Appointment status', created_by: 'Created By', booked_by: 'Booked By', advisor_name: 'Advisor name', advisor: 'Advisor', booked_source: 'Booking source' }
 export const typeLabel = (t) => FLAG_TYPES[t]?.label || t
+
+// ------------------------------------------------------------------------------------------- marking a flag sorted
+// A manager ticks a flag once it is sorted; /api/flags writes status "resolved" into the Flags tab, and "open"
+// again if it is undone. The sync resolves some call flags itself when a re-check no longer finds the mismatch.
+export const STATUS_TEXT = { open: 'Open', resolved: 'Sorted' }
+export const statusText = (s) => STATUS_TEXT[s] || s || '—'
+
+/**
+ * Flags with the changes made in this browser laid over them. A change shows at once, before the sheet data the
+ * dashboard reads (cached for up to 30 seconds) has caught up. overrides: Map flag_id -> { status, resolved_at }.
+ */
+export function applyFlagOverrides(flags, overrides) {
+  if (!overrides?.size) return flags
+  return flags.map((f) => {
+    const o = overrides.get(f.flag_id)
+    return o ? { ...f, status: o.status, resolved_at: o.resolved_at ?? f.resolved_at } : f
+  })
+}
+
+/** The overrides the sheet data has not caught up with yet (once a flag reads the same status, its override goes). */
+export function pendingOverrides(flags, overrides) {
+  if (!overrides?.size) return overrides
+  const status = new Map(flags.map((f) => [f.flag_id, f.status]))
+  const left = new Map([...overrides].filter(([id, o]) => status.has(id) && status.get(id) !== o.status))
+  return left.size === overrides.size ? overrides : left
+}

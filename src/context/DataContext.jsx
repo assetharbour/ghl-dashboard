@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchDashboardData } from '../lib/sheets'
+import { fetchDashboardData, saveFlagStatus } from '../lib/sheets'
+import { applyFlagOverrides, pendingOverrides } from '../lib/flags'
 import { filterByDateRange, attachAppointmentStart } from '../lib/metrics'
 
 const DataContext = createContext(null)
@@ -10,6 +11,8 @@ export function DataProvider({ children }) {
   // Appointments, flags and Created By locks come from the sync's field audit; empty until it has run.
   const [appointments, setAppointments] = useState([])
   const [flags, setFlags] = useState([])
+  // Flags ticked (or undone) in this browser, shown at once until the sheet data catches up: flag_id -> { status, resolved_at }.
+  const [flagOverrides, setFlagOverrides] = useState(() => new Map())
   const [locks, setLocks] = useState([])
   // What the advisor's Evonex call looked like per appointment, and calls per day per caller (empty until CALL_EVIDENCE is on).
   const [callEvidence, setCallEvidence] = useState([])
@@ -30,6 +33,7 @@ export function DataProvider({ children }) {
       setLastSync(sync)
       setAppointments(appts)
       setFlags(flagRows)
+      setFlagOverrides((prev) => pendingOverrides(flagRows, prev))
       setLocks(lockRows)
       setCallEvidence(evidenceRows || [])
       setCallActivity(activityRows || [])
@@ -59,6 +63,26 @@ export function DataProvider({ children }) {
     [decoratedRows, dateRange, customRange]
   )
 
+  const shownFlags = useMemo(() => applyFlagOverrides(flags, flagOverrides), [flags, flagOverrides])
+
+  /** Marks a flag sorted ('resolved') or opens it again ('open'). Shows the change at once and undoes it if saving fails. */
+  const setFlagStatus = useCallback(async (flagId, status) => {
+    const previous = flagOverrides.get(flagId)
+    setFlagOverrides((prev) => new Map(prev).set(flagId, { status, resolved_at: status === 'resolved' ? new Date().toISOString() : '' }))
+    try {
+      const saved = await saveFlagStatus(flagId, status)
+      setFlagOverrides((prev) => new Map(prev).set(flagId, { status: saved.status, resolved_at: saved.resolved_at }))
+    } catch (e) {
+      setFlagOverrides((prev) => {
+        const next = new Map(prev)
+        if (previous) next.set(flagId, previous)
+        else next.delete(flagId)
+        return next
+      })
+      throw e
+    }
+  }, [flagOverrides])
+
   const openDrilldown = useCallback((title, drillRows, extraColumns = []) => {
     setDrilldown({ title, rows: drillRows, extraColumns })
   }, [])
@@ -71,7 +95,8 @@ export function DataProvider({ children }) {
       error,
       allRows: decoratedRows,
       appointments,
-      flags,
+      flags: shownFlags,
+      setFlagStatus,
       locks,
       callEvidence,
       callActivity,
@@ -92,7 +117,8 @@ export function DataProvider({ children }) {
       allRows,
       decoratedRows,
       appointments,
-      flags,
+      shownFlags,
+      setFlagStatus,
       locks,
       callEvidence,
       callActivity,

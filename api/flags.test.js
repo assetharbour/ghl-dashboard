@@ -1,0 +1,130 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// The only endpoint that writes to the sheet: who may call it, what it accepts, and exactly which cells it touches.
+
+const USER = 'dash'
+const PASS = 'p@ss:word'
+const basic = (u, p) => 'Basic ' + Buffer.from(`${u}:${p}`).toString('base64')
+
+const HEADER = ['flag_id', 'detected_at', 'type', 'contact_id', 'field', 'old_value', 'new_value', 'locked_value', 'appointment_id', 'detail', 'status']
+
+let flagsTab
+let calls
+let failWith
+
+vi.mock('google-auth-library', () => ({
+  GoogleAuth: class {
+    async request({ url, method, data }) {
+      calls.push({ url, method: method || 'GET', data })
+      if (failWith) throw failWith
+      if (!method) return { data: { values: flagsTab } }
+      return { data: {} }
+    }
+  },
+}))
+
+function res() {
+  return {
+    headers: {}, code: null, body: null,
+    setHeader(k, v) { this.headers[k] = v },
+    status(c) { this.code = c; return this },
+    json(b) { this.body = b; return this },
+  }
+}
+
+async function call(body, { headers = { authorization: basic(USER, PASS) }, method = 'POST' } = {}) {
+  const { default: handler } = await import('./flags.js')
+  const r = res()
+  await handler({ method, headers, body }, r)
+  return r
+}
+
+const writes = () => calls.find((c) => c.method === 'POST')?.data
+
+beforeEach(() => {
+  vi.resetModules()
+  calls = []
+  failWith = null
+  flagsTab = [HEADER, ['f1', 't', 'booked_by_missing', 'c1', '', '', '', '', 'e1', 'd', 'open'], ['f2', 't', 'showed_without_call', 'c2', '', '', '', '', 'e2', 'd', 'open']]
+  process.env.DASHBOARD_AUTH_USER = USER
+  process.env.DASHBOARD_AUTH_PASS = PASS
+  process.env.GOOGLE_SHEET_ID = 'sheet'
+  process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '{}'
+})
+
+describe('access control', () => {
+  it('rejects a request without the dashboard login, without touching Google', async () => {
+    const r = await call({ flag_id: 'f1', status: 'resolved' }, { headers: {} })
+    expect(r.code).toBe(401)
+    expect(calls).toEqual([])
+  })
+
+  it('allows only POST', async () => {
+    for (const method of ['GET', 'PUT', 'DELETE']) expect((await call({ flag_id: 'f1', status: 'resolved' }, { method })).code).toBe(405)
+    expect(calls).toEqual([])
+  })
+
+  it.each([
+    ['no body', undefined],
+    ['unknown status', { flag_id: 'f1', status: 'deleted' }],
+    ['missing flag id', { status: 'resolved' }],
+    ['a flag id that could be a range', { flag_id: "Leads!A1'", status: 'resolved' }],
+    ['broken JSON', '{nope'],
+  ])('rejects %s', async (_name, body) => {
+    expect((await call(body)).code).toBe(400)
+    expect(calls).toEqual([])
+  })
+})
+
+describe('writing the status', () => {
+  it('marks one flag resolved and adds the resolved_at / resolved_via columns at the end', async () => {
+    const r = await call({ flag_id: 'f2', status: 'resolved' })
+    expect(r.code).toBe(200)
+    expect(r.body).toMatchObject({ flag_id: 'f2', status: 'resolved' })
+    const { valueInputOption, data } = writes()
+    expect(valueInputOption).toBe('RAW')
+    expect(data).toEqual([
+      { range: 'Flags!L1', values: [['resolved_at']] },
+      { range: 'Flags!M1', values: [['resolved_via']] },
+      { range: 'Flags!K3', values: [['resolved']] },
+      { range: 'Flags!L3', values: [[r.body.resolved_at]] },
+      { range: 'Flags!M3', values: [['dashboard']] },
+    ])
+    expect(r.body.resolved_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/)
+  })
+
+  it('reuses the extra columns once they exist, and clears them when a flag is opened again', async () => {
+    flagsTab[0] = [...HEADER, 'resolved_at', 'resolved_via']
+    flagsTab[1] = [...flagsTab[1].slice(0, 10), 'resolved', '2026-11-19T10:00:00Z', 'dashboard']
+    const r = await call({ flag_id: 'f1', status: 'open' })
+    expect(r.code).toBe(200)
+    expect(writes().data).toEqual([
+      { range: 'Flags!K2', values: [['open']] },
+      { range: 'Flags!L2', values: [['']] },
+      { range: 'Flags!M2', values: [['']] },
+    ])
+  })
+
+  it('answers 404 for a flag that is not in the tab and writes nothing', async () => {
+    expect((await call({ flag_id: 'nope', status: 'resolved' })).code).toBe(404)
+    expect(writes()).toBeUndefined()
+  })
+
+  it('says so when the service account has no edit access', async () => {
+    failWith = Object.assign(new Error('forbidden'), { response: { status: 403 } })
+    const r = await call({ flag_id: 'f1', status: 'resolved' })
+    expect(r.code).toBe(403)
+    expect(r.body).toEqual({ error: 'no_write_access' })
+  })
+
+  it('accepts a JSON string body', async () => {
+    expect((await call(JSON.stringify({ flag_id: 'f1', status: 'resolved' }))).code).toBe(200)
+  })
+})
+
+describe('columnLetter', () => {
+  it('counts like a spreadsheet', async () => {
+    const { columnLetter } = await import('./flags.js')
+    expect([0, 10, 25, 26, 27, 51, 52].map(columnLetter)).toEqual(['A', 'K', 'Z', 'AA', 'AB', 'AZ', 'BA'])
+  })
+})

@@ -24,6 +24,26 @@ async function fetchViaServer() {
   }
 }
 
+/**
+ * Marks a flag sorted ('resolved') or opens it again ('open') in the Flags tab. Resolves with the saved status;
+ * rejects with an Error whose message says why (no_write_access, flag_not_found, ...).
+ */
+export async function saveFlagStatus(flagId, status) {
+  const res = await fetch('/api/flags', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ flag_id: flagId, status }),
+  })
+  let body = null
+  try {
+    body = await res.json()
+  } catch {
+    body = null
+  }
+  if (!res.ok) throw new Error(body?.error || `Flags API ${res.status}`)
+  return body
+}
+
 function parseTable(values) {
   if (values.length < 1) return []
   const headers = values[0]

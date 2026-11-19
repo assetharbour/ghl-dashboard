@@ -1,16 +1,38 @@
-import { useMemo } from 'react'
-import { Info } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Check, Info, RotateCcw } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { DASH, fmtDate, fmtInt, parseDate } from '../lib/format'
 import { rangeBounds } from '../lib/metrics'
-import { FIELD_LABEL, FLAG_TYPES, flagValues, typeLabel } from '../lib/flags'
+import { FIELD_LABEL, FLAG_TYPES, flagValues, statusText, typeLabel } from '../lib/flags'
 
 
 export default function Flags() {
-  const { loading, flags, allRows, appointments, dateRange, customRange, openDrilldown } = useData()
+  const { loading, flags, setFlagStatus, allRows, appointments, dateRange, customRange, openDrilldown } = useData()
+  const [saving, setSaving] = useState(() => new Set()) // flag ids being saved
+  const [saveError, setSaveError] = useState(null)
+
+  const mark = async (flagId, status) => {
+    setSaveError(null)
+    setSaving((prev) => new Set(prev).add(flagId))
+    try {
+      await setFlagStatus(flagId, status)
+    } catch (e) {
+      setSaveError(
+        e.message === 'no_write_access'
+          ? 'The dashboard cannot save to the sheet yet: its Google service account needs edit access to the sheet. Nothing was changed.'
+          : 'That change could not be saved, so the flag is back as it was. Please try again.'
+      )
+    } finally {
+      setSaving((prev) => {
+        const next = new Set(prev)
+        next.delete(flagId)
+        return next
+      })
+    }
+  }
 
   const leadByContact = useMemo(() => {
     const map = new Map()
@@ -43,6 +65,8 @@ export default function Flags() {
           client_name: lead.client_name || nameByContact.get(f.contact_id) || DASH,
           detected_on: detected ? `${fmtDate(detected)} ${detected.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : DASH,
           type_label: typeLabel(f.type),
+          status_label: statusText(f.status),
+          sorted_on: f.status === 'resolved' && parseDate(f.resolved_at) ? fmtDate(f.resolved_at) : '',
           field_label: FIELD_LABEL[f.field] || f.field || DASH,
           group: FLAG_TYPES[f.type]?.group || 'other',
         }
@@ -95,7 +119,16 @@ export default function Flags() {
         <Skeleton className="h-72" />
       ) : (
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-ink mb-4">All flags</h2>
+          <h2 className="text-sm font-semibold text-ink">All flags</h2>
+          <p className="text-xs text-muted mt-0.5 mb-4 max-w-3xl">
+            Once a flag has been looked at and sorted, click Mark sorted. It is saved to the sheet, so everyone sees it, and the open counts above change
+            straight away. Undo opens it again.
+          </p>
+          {saveError && (
+            <p role="alert" className="mb-3 rounded-lg border border-brand-pink/40 bg-brand-pink/5 px-3 py-2 text-sm text-brand-pink">
+              {saveError}
+            </p>
+          )}
           {flags.length === 0 ? (
             <p className="text-sm text-muted py-6 text-center">
               No flags yet. They appear once the sync&apos;s field audit has run (FIELD_AUDIT=on) and something needs attention.
@@ -106,7 +139,7 @@ export default function Flags() {
               exportName="flags"
               filters={[
                 { key: 'type_label', label: 'Flag' },
-                { key: 'status', label: 'Status' },
+                { key: 'status_label', label: 'Status' },
               ]}
               columns={[
                 { key: 'detected_on', label: 'Detected', sortValue: (r) => r.detected_at },
@@ -117,7 +150,55 @@ export default function Flags() {
                 { key: 'now', label: 'Now' },
                 { key: 'official', label: 'Official (locked or calendar)' },
                 { key: 'detail', label: 'What happened' },
-                { key: 'status', label: 'Status' },
+                {
+                  key: 'status_label',
+                  label: 'Status',
+                  rawForCsv: (r) => (r.sorted_on ? `${r.status_label} ${r.sorted_on}` : r.status_label),
+                  render: (r) => (
+                    <span className={r.status === 'open' ? 'text-brand-pink font-medium' : 'text-muted'}>
+                      {r.status_label}
+                      {r.sorted_on && <span className="text-xs"> {r.sorted_on}</span>}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'action',
+                  label: 'Sorted?',
+                  sortable: false,
+                  rawForCsv: () => '',
+                  render: (r) => {
+                    const busy = saving.has(r.flag_id)
+                    if (r.status === 'open') {
+                      return (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => mark(r.flag_id, 'resolved')}
+                          title="Mark this flag as sorted"
+                          aria-label={`Mark as sorted: ${r.type_label}, ${r.client_name}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-brand-green/60 px-2 py-1 text-xs font-medium text-brand-green hover:bg-brand-green hover:text-white disabled:opacity-50 transition-colors"
+                        >
+                          <Check size={13} /> {busy ? 'Saving' : 'Mark sorted'}
+                        </button>
+                      )
+                    }
+                    if (r.status === 'resolved') {
+                      return (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => mark(r.flag_id, 'open')}
+                          title="Open this flag again"
+                          aria-label={`Open again: ${r.type_label}, ${r.client_name}`}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted hover:text-ink hover:bg-page disabled:opacity-50 transition-colors"
+                        >
+                          <RotateCcw size={12} /> {busy ? 'Saving' : 'Undo'}
+                        </button>
+                      )
+                    }
+                    return null
+                  },
+                },
               ]}
               rows={rows}
             />
