@@ -11,12 +11,14 @@ const HEADER = ['flag_id', 'detected_at', 'type', 'contact_id', 'field', 'old_va
 let flagsTab
 let calls
 let failWith
+let columnCount
 
 vi.mock('google-auth-library', () => ({
   GoogleAuth: class {
     async request({ url, method, data }) {
       calls.push({ url, method: method || 'GET', data })
       if (failWith) throw failWith
+      if (!method && url.includes('fields=sheets.properties')) return { data: { sheets: [{ properties: { sheetId: 1, title: 'Other' } }, { properties: { sheetId: 77, title: 'Flags', gridProperties: { columnCount } } }] } }
       if (!method) return { data: { values: flagsTab } }
       return { data: {} }
     }
@@ -39,12 +41,14 @@ async function call(body, { headers = { authorization: basic(USER, PASS) }, meth
   return r
 }
 
-const writes = () => calls.find((c) => c.method === 'POST')?.data
+const writes = () => calls.find((c) => c.method === 'POST' && c.url.endsWith('/values:batchUpdate'))?.data
+const widen = () => calls.find((c) => c.method === 'POST' && !c.url.includes('/values'))?.data
 
 beforeEach(() => {
   vi.resetModules()
   calls = []
   failWith = null
+  columnCount = 11 // the sync creates the tab exactly as wide as its own columns
   flagsTab = [HEADER, ['f1', 't', 'booked_by_missing', 'c1', '', '', '', '', 'e1', 'd', 'open'], ['f2', 't', 'showed_without_call', 'c2', '', '', '', '', 'e2', 'd', 'open']]
   process.env.DASHBOARD_AUTH_USER = USER
   process.env.DASHBOARD_AUTH_PASS = PASS
@@ -93,11 +97,26 @@ describe('writing the status', () => {
     expect(r.body.resolved_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/)
   })
 
+  it('widens the Flags tab first, because Google refuses a write outside the grid', async () => {
+    await call({ flag_id: 'f2', status: 'resolved' })
+    expect(widen()).toEqual({ requests: [{ appendDimension: { sheetId: 77, dimension: 'COLUMNS', length: 2 } }] })
+    const order = calls.filter((c) => c.method === 'POST').map((c) => (c.url.includes('/values') ? 'values' : 'widen'))
+    expect(order).toEqual(['widen', 'values'])
+  })
+
+  it('does not widen a tab that is already wide enough', async () => {
+    columnCount = 26
+    await call({ flag_id: 'f2', status: 'resolved' })
+    expect(widen()).toBeUndefined()
+    expect(writes()).toBeDefined()
+  })
+
   it('reuses the extra columns once they exist, and clears them when a flag is opened again', async () => {
     flagsTab[0] = [...HEADER, 'resolved_at', 'resolved_via']
     flagsTab[1] = [...flagsTab[1].slice(0, 10), 'resolved', '2026-11-19T10:00:00Z', 'dashboard']
     const r = await call({ flag_id: 'f1', status: 'open' })
     expect(r.code).toBe(200)
+    expect(calls.some((c) => c.url.includes('fields=sheets.properties'))).toBe(false) // columns exist: no metadata read
     expect(writes().data).toEqual([
       { range: 'Flags!K2', values: [['open']] },
       { range: 'Flags!L2', values: [['']] },

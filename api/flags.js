@@ -36,6 +36,22 @@ export function columnLetter(index) {
   return s
 }
 
+/** Makes the Flags tab at least `count` columns wide. */
+async function ensureColumns(sheetId, count) {
+  const meta = await google().request({
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(sheetId,title,gridProperties.columnCount)`,
+  })
+  const tab = (meta.data.sheets || []).map((s) => s.properties).find((p) => p.title === TAB)
+  if (!tab) throw Object.assign(new Error('Flags tab not found'), { response: { status: 409 } })
+  const have = tab.gridProperties?.columnCount ?? 0
+  if (have >= count) return
+  await google().request({
+    url: `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
+    method: 'POST',
+    data: { requests: [{ appendDimension: { sheetId: tab.sheetId, dimension: 'COLUMNS', length: count - have } }] },
+  })
+}
+
 function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
   if (typeof req.body === 'string') {
@@ -88,6 +104,9 @@ export default async function handler(req, res) {
       }
       cols[name] = i
     }
+    // The sync created the tab exactly as wide as its own columns, and Google refuses a write outside the grid
+    // ("exceeds grid limits"), so the first time the extra columns are needed the tab is widened.
+    if (width > header.length) await ensureColumns(sheetId, width)
     const resolved = status === 'resolved'
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
     data.push({ range: `${TAB}!${columnLetter(statusCol)}${rowNumber}`, values: [[status]] })
