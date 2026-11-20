@@ -6,7 +6,7 @@ import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDate, fmtCurrency, isBlank, DASH } from '../lib/format'
-import { countBy, inCurrentMonth } from '../lib/metrics'
+import { countBy, inCurrentMonth, isCompleted } from '../lib/metrics'
 
 const MIN_LEADS_FOR_CONVERSION = 3
 
@@ -77,7 +77,7 @@ export default function Introducers() {
         // Conversion = reached the "Completion" pipeline stage, same
         // definition as Advisor Performance — not case_status, which can
         // read "won" without the case ever actually reaching Completion.
-        const completions = leads.filter((r) => r.pipeline_stage === 'Completion').length
+        const completions = leads.filter(isCompleted).length
         return {
           source,
           leads,

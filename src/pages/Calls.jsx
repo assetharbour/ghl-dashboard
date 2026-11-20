@@ -324,7 +324,9 @@ export default function Calls() {
           <h2 className="text-base font-semibold text-ink">Annual Review Calls – Mortgage &amp; Protection</h2>
           <p className="text-xs text-muted mt-1">
             Tracked from the product end date (the ERC Date): the client gets called once a year, every year,
-            counting down to the product end date itself
+            counting down to the product end date itself. This list only covers leads created in the date range above;
+            for the full monthly call list across every case, with print, use Annual Review Calls by Month on Case
+            Management.
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

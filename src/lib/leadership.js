@@ -1,6 +1,6 @@
 import { isBlank, parseDate } from './format'
 import { ADVISORS, SALES_TEAM, UNKNOWN, buildSalesTable, bookedInPeriod, namesMatch, weekStart } from './sales'
-import { avgDaysCreatedToCompletion, stageAtOrBeyond, isStuck, isAwaitingClientResponse } from './metrics'
+import { isCompleted, avgDaysCreatedToCompletion, stageAtOrBeyond, isStuck, isAwaitingClientResponse } from './metrics'
 import { callActivityTable } from './calls'
 
 // The leadership board: who is performing, in three teams, plus the shape of the pipeline. Every number reuses the definitions
@@ -12,7 +12,7 @@ import { callActivityTable } from './calls'
 //   * lead cohort     = leads CREATED in the date range (leads received, introducers, the funnel)
 // Small samples are never ranked as if they were meaningful: a speed figure needs MIN_LEADS_FOR_SPEED leads behind it.
 
-export const HANDOVER_ADMINS = ['Anita Andrews', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver']
+export const HANDOVER_ADMINS = ['Anita Andrews', 'Sarah Bennett', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver']
 export const MIN_LEADS_FOR_SPEED = 3
 export const SPEED_BUCKETS = [
   { id: 'b5', label: 'Within 5 min', max: 5 },
@@ -25,7 +25,7 @@ export const SPEED_BUCKETS = [
 const ratio = (a, b) => (b ? a / b : null)
 const sumBy = (rows, fn) => rows.reduce((t, r) => t + fn(r), 0)
 const revenueOf = (r) => (isBlank(r.total_revenue) || !Number.isFinite(Number(r.total_revenue)) ? 0 : Number(r.total_revenue))
-const isCompletion = (r) => r.pipeline_stage === 'Completion'
+const isCompletion = isCompleted // Completion or Post Completion
 
 // Revenue gap (Andrew, 18 Nov 2026): a case that has reached Application Submitted or any later stage should have its fee
 // recorded. Lost cases have no place in the stage order, so they never count. "No revenue" means total_revenue is blank:

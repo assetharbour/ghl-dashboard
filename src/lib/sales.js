@@ -1,4 +1,5 @@
 import { parseDate, isBlank } from './format'
+import { COMPLETED_STAGES } from './metrics'
 
 // Sales-team KPIs. This is a line-for-line port of ghl-reporting-sync/app/sales_metrics.py, which holds the
 // agreed definitions and their tests; src/lib/sales.test.js repeats those cases. Change both together.
@@ -19,7 +20,7 @@ import { parseDate, isBlank } from './format'
 
 export const SALES_TEAM = ['Harry Kalsi', 'Ava Morris-Boundy', 'Hugo Sharpe']
 export const ADVISORS = ['Henny Lessey', 'Joe Nicholls', 'Xavier Collin', 'Cecilia Szabo', 'Carl Gladman', 'Anthony Fox']
-export const COMPLETION_STAGES = ['Completion', 'Post Completion']
+export const COMPLETION_STAGES = COMPLETED_STAGES
 export const UNKNOWN = '(unknown)'
 
 export function nameTokens(name) {
@@ -73,7 +74,9 @@ export function contactInfoFromLeads(leadRows) {
     if (!id) continue
     const entry = (info[id] ??= { fact_find_outcome: '', completed: false, completed_at: '' })
     if (!isBlank(r.fact_find_outcome) && isBlank(entry.fact_find_outcome)) entry.fact_find_outcome = r.fact_find_outcome
-    const completed = !isBlank(r.completion_date) || COMPLETION_STAGES.includes(r.pipeline_stage)
+    // Only a case at Completion or Post Completion has completed. A completion date on its own is often the
+    // expected date (cases at Offer Issued or Exchange carry dates into 2027), so it never counts by itself.
+    const completed = COMPLETED_STAGES.includes(r.pipeline_stage)
     if (completed) {
       entry.completed = true
       const done = parseDate(r.completion_date)

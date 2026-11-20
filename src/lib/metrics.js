@@ -57,7 +57,8 @@ export function personColor(name, i) {
 // human manually reassigning the contact in GHL, bypassing both flows.
 // Updated for the S1-S6 workflows (22 Oct 2026): S1 Lead Intake now round-robins new leads to the 3 sales reps
 // (Ava, Harry, Hugo), so they are expected owners at stages 1-3, alongside the original four.
-export const EXPECTED_ADMINS = ['Anita Andrews', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver', 'Ava Morris-Boundy', 'Harry Kalsi', 'Hugo Sharpe']
+// Sarah Bennett added 20 Nov 2026: Anita confirmed (18 Nov) the Admin team is Anita and Sarah, and Sarah holds cases as Admin.
+export const EXPECTED_ADMINS = ['Anita Andrews', 'Sarah Bennett', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver', 'Ava Morris-Boundy', 'Harry Kalsi', 'Hugo Sharpe']
 
 export function isAnomalousAdmin(adminValue) {
   return Boolean(adminValue) && !EXPECTED_ADMINS.includes(adminValue)
@@ -80,6 +81,16 @@ export function adminGroup(adminValue) {
 // via isAnomalousAdmin directly.
 export const ADMIN_FILTER_PROPS = {
   allowedValues: EXPECTED_ADMINS,
+}
+
+// A case has completed once it reaches Completion, and stays completed when the team moves it on to Post Completion
+// after aftercare (Andrew, 18 Nov 2026: October showed no completions while completed cases sat at Post Completion).
+// Every completion count on the dashboard uses this, so it never depends on a completion date that may only be the
+// expected one.
+export const COMPLETED_STAGES = ['Completion', 'Post Completion']
+
+export function isCompleted(row) {
+  return COMPLETED_STAGES.includes(row.pipeline_stage)
 }
 
 export function stageIndex(stage) {
@@ -251,14 +262,14 @@ export function avgDaysToCompletion(rows) {
 // Advisor Performance's "Avg Days to Completion" — opportunity created_date
 // to completion_date, computed per row and averaged (rows missing either
 // date are excluded, not counted as 0). Only counts rows that have actually
-// reached the "Completion" pipeline stage — a case with both dates set but
+// reached the Completion or Post Completion stage — a case with both dates set but
 // still sitting at an earlier stage (e.g. a pre-filled target date) doesn't
 // count as completed yet. Distinct from avgDaysToCompletion above, which
 // reads the Sheet's pre-computed avg_days_to_completion column
 // (first_contact_time → completion_time) used on the Overview page.
 export function avgDaysCreatedToCompletion(rows) {
   const vals = rows
-    .filter((r) => r.pipeline_stage === 'Completion')
+    .filter(isCompleted)
     .map((r) => {
       const created = parseDate(r.created_date)
       const completion = parseDate(r.completion_date)

@@ -6,7 +6,7 @@ import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDays, fmtDate, isBlank, DASH } from '../lib/format'
-import { stageAtOrBeyond, avgDaysCreatedToCompletion, isOnHold, isStuck, mean } from '../lib/metrics'
+import { stageAtOrBeyond, avgDaysCreatedToCompletion, isOnHold, isStuck, mean, isCompleted } from '../lib/metrics'
 
 const eq = (v, target) => String(v).trim().toLowerCase() === target
 const NO_ADVISOR = '(No advisor assigned)'
@@ -30,7 +30,7 @@ const METRIC_DEFS = [
   { id: 'offers', label: 'Offers Issued', test: (r) => stageAtOrBeyond(r, 'Offer Issued') },
   // "Completion" pipeline stage, not the completion_status custom field —
   // matches the top-level Completions/Conversion Rate cards below.
-  { id: 'mortgageDone', label: 'Mortgage Completed', test: (r) => r.pipeline_stage === 'Completion' },
+  { id: 'mortgageDone', label: 'Mortgage Completed', test: isCompleted },
   { id: 'protectionDone', label: 'Protection Completed', test: (r) => eq(r.protection_status, 'submitted') },
   { id: 'lost', label: 'Declined / NPW', test: (r) => r.case_status === 'lost' },
   // "On Hold" = case_status === 'abandoned' (see isOnHold in metrics.js).
@@ -74,7 +74,7 @@ export default function Advisors() {
       // Conversion Rate = reached the "Completion" pipeline stage / all
       // cases assigned — not case_status, which can be marked "won"
       // without the case ever reaching Completion (see Mortgage Completed).
-      const completions = own.filter((r) => r.pipeline_stage === 'Completion').length
+      const completions = own.filter(isCompleted).length
       // Close rate = completions / (completions + lost) — "won" here means
       // actually reached Completion, same signal as Conversion Rate above,
       // not the raw case_status flag (which can say "won" prematurely).
@@ -130,7 +130,7 @@ export default function Advisors() {
     // Completions/Conversion Rate = reached the "Completion" pipeline
     // stage — not case_status, which can be marked "won" without the case
     // ever reaching Completion (no offer/exchange/completion data set).
-    const completions = sel.filter((r) => r.pipeline_stage === 'Completion')
+    const completions = sel.filter(isCompleted)
     return {
       assigned: sel,
       contacted: sel.filter((r) => eq(r.admin_call_status, 'answered')),

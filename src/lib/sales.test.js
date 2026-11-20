@@ -168,12 +168,14 @@ describe('helpers', () => {
       { contact_id: 'c1', fact_find_outcome: '', completion_date: '2026-06-01', pipeline_stage: 'Completion' },
       { contact_id: 'c2', pipeline_stage: 'Post Completion', completion_date: '' },
       { contact_id: 'c3', pipeline_stage: 'Docs Requested', completion_date: '' },
+      { contact_id: 'c4', pipeline_stage: 'Exchange', completion_date: '2027-01-01' }, // expected date only: not completed (20 Nov 2026)
       { contact_id: '', pipeline_stage: 'Completion' },
     ])
     expect(info.c1).toEqual({ fact_find_outcome: 'Review - YES', completed: true, completed_at: '2026-06-01' })
     expect(info.c2.completed).toBe(true)
     expect(info.c3.completed).toBe(false)
-    expect(Object.keys(info)).toEqual(['c1', 'c2', 'c3'])
+    expect(info.c4.completed).toBe(false)
+    expect(Object.keys(info)).toEqual(['c1', 'c2', 'c3', 'c4'])
   })
 
   it('counts appointments per advisor and reports non-advisors', () => {

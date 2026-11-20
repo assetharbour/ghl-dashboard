@@ -6,7 +6,7 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDate, parseDate, displayValue } from '../lib/format'
-import { isGappingCase, hasProtection, ADMIN_FILTER_PROPS, GAPPING_FROM_STAGE } from '../lib/metrics'
+import { isGappingCase, hasProtection, ADMIN_FILTER_PROPS, GAPPING_FROM_STAGE, isCompleted } from '../lib/metrics'
 
 export default function Gapping() {
   const { rows, loading, openDrilldown } = useData()
@@ -16,10 +16,16 @@ export default function Gapping() {
     const unprotected = mortgage.filter((r) => !hasProtection(r))
     const protectedCases = mortgage.filter(hasProtection)
 
+    // Completed cases first, most recent completion first (warmest cross-sell), then cases still going through, soonest
+    // expected completion first. On a case that has not completed, the completion date is only the expected one.
+    const doneAt = (r) => (isCompleted(r) ? parseDate(r.completion_date)?.getTime() ?? -Infinity : null)
     const workList = [...unprotected].sort((a, b) => {
-      const ad = parseDate(a.completion_date)?.getTime() ?? -Infinity
-      const bd = parseDate(b.completion_date)?.getTime() ?? -Infinity
-      return bd - ad
+      const ad = doneAt(a)
+      const bd = doneAt(b)
+      if (ad !== null && bd !== null) return bd - ad
+      if (ad !== null) return -1
+      if (bd !== null) return 1
+      return (parseDate(a.completion_date)?.getTime() ?? Infinity) - (parseDate(b.completion_date)?.getTime() ?? Infinity)
     })
 
     return { mortgage, unprotected, protectedCases, workList }
@@ -106,7 +112,7 @@ export default function Gapping() {
           <div className="card p-5 lg:col-span-3">
             <h2 className="text-sm font-semibold text-ink mb-1">Gapping Work List</h2>
             <p className="text-xs text-muted mb-4">
-              Unprotected mortgage cases from {GAPPING_FROM_STAGE} onwards, most recent completions first (warmest cross-sell)
+              Unprotected mortgage cases from {GAPPING_FROM_STAGE} onwards, completed cases first, most recent first (warmest cross-sell), then the rest by expected completion date
             </p>
             <DataTable
               columns={[
@@ -115,8 +121,14 @@ export default function Gapping() {
                 { key: 'pipeline_stage', label: 'Stage' },
                 {
                   key: 'completion_date',
-                  label: 'Completed',
-                  render: (r) => fmtDate(r.completion_date),
+                  label: 'Completion date',
+                  render: (r) =>
+                    isCompleted(r) || !parseDate(r.completion_date) ? (
+                      fmtDate(r.completion_date)
+                    ) : (
+                      <span className="text-muted">{fmtDate(r.completion_date)} (expected)</span>
+                    ),
+                  rawForCsv: (r) => (isCompleted(r) || !parseDate(r.completion_date) ? fmtDate(r.completion_date) : `${fmtDate(r.completion_date)} (expected)`),
                   sortValue: (r) => parseDate(r.completion_date)?.getTime() ?? null,
                 },
                 { key: 'admin', label: 'Admin' },

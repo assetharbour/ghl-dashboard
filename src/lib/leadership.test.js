@@ -155,7 +155,10 @@ describe('completions are counted when they completed', () => {
     expect(completedInRange(done, null, new Date('2026-10-10T00:00:00Z'))).toBe(false) // end is exclusive
     expect(completedInRange({ ...done, completion_date: '' }, start, null)).toBe(false) // no date: cannot be placed in a period
     expect(completedInRange({ ...done, completion_date: '' }, null, null)).toBe(true) // but All time counts it
-    expect(completedInRange(lead({ pipeline_stage: 'Post Completion', completion_date: '2026-10-10' }), start, null)).toBe(false)
+    // moved on to Post Completion after aftercare: still completed in October (Andrew, 18 Nov 2026)
+    expect(completedInRange(lead({ pipeline_stage: 'Post Completion', completion_date: '2026-10-10' }), start, null)).toBe(true)
+    // an expected completion date on a case still at Exchange is not a completion
+    expect(completedInRange(lead({ pipeline_stage: 'Exchange', completion_date: '2026-10-10' }), start, null)).toBe(false)
   })
 })
 
@@ -201,13 +204,13 @@ describe('handover team board', () => {
     lead({ admin: 'Sarah Bennett', pipeline_stage: 'Completion', case_status: 'won', completion_date: '2026-10-02' }), lead({ admin: 'Harry Kalsi' }), lead({ admin: '' }),
   ]
   const board = adminBoard({ allRows: all, now: NOW, start: new Date('2026-10-01T00:00:00Z'), end: null })
-  it('ranks only the four handover admins by completions in the period, then by open cases already at an application', () => {
-    expect(HANDOVER_ADMINS).toHaveLength(4)
-    expect(board.map((r) => [r.name, r.place, r.completions])).toEqual([['Anita Andrews', 1, 1], ['Ben Robertson', 2, 0]])
+  it('ranks only the handover admins by completions in the period, then by open cases already at an application', () => {
+    expect(HANDOVER_ADMINS).toEqual(['Anita Andrews', 'Sarah Bennett', 'Ben Robertson', 'Lewis Flude', 'Alison Gulliver'])
+    expect(board.map((r) => [r.name, r.place, r.completions])).toEqual([['Anita Andrews', 1, 1], ['Sarah Bennett', 2, 1], ['Ben Robertson', 3, 0]]) // Sarah is in the Admin team (Anita, 18 Nov 2026)
     const anita = board[0]
     expect([anita.open, anita.progressed, anita.revenue]).toEqual([2, 1, 200])
     expect(anita.avgDays).toBe(72)
-    expect([board[1].open, board[1].awaitingClient, board[1].progressed]).toEqual([2, 1, 1])
+    expect([board[2].open, board[2].awaitingClient, board[2].progressed]).toEqual([2, 1, 1])
   })
 
   it('shows what each person holds now whatever the range, and drops someone only when they hold nothing and completed nothing in the period', () => {
@@ -243,7 +246,7 @@ describe('introducers, funnel, trend, headline and honours', () => {
     expect(f[5].pctOfLeads).toBeCloseTo(1 / 6, 10)
     expect(funnel([]).map((s) => s.count)).toEqual([0, 0, 0, 0, 0, 0])
     const withPost = funnel([lead({ pipeline_stage: 'Completion' }), lead({ pipeline_stage: 'Post Completion' })])
-    expect(withPost.map((s) => s.count)).toEqual([2, 2, 2, 2, 2, 1]) // Post Completion passed every stage but is not a "Completion", as on the other pages
+    expect(withPost.map((s) => s.count)).toEqual([2, 2, 2, 2, 2, 2]) // Post Completion has completed too, as on the other pages
     expect(funnel([])[1].pctOfLeads).toBeNull()
   })
 

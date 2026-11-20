@@ -17,21 +17,25 @@ import ChartCard from '../components/ChartCard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { fmtInt, fmtPct, fmtDays, fmtDate, parseDate } from '../lib/format'
-import { STAGE_ORDER, CHART_COLORS, countBy, avgDaysToCompletion, inCurrentMonth } from '../lib/metrics'
+import { STAGE_ORDER, CHART_COLORS, countBy, avgDaysToCompletion, avgDaysCreatedToCompletion, inCurrentMonth, isCompleted } from '../lib/metrics'
 
 const TOP_SOURCES = 8
 
 export default function Overview() {
-  const { rows, loading, openDrilldown } = useData()
+  const { rows, allRows, loading, openDrilldown } = useData()
 
   const m = useMemo(() => {
     const active = rows.filter((r) => r.case_status === 'open')
-    const completionsMonth = rows.filter((r) => inCurrentMonth(r.completion_date))
-    // Conversion = reached the "Completion" pipeline stage, same definition
+    // Completed this calendar month, whenever the lead was created (the date range picks leads by created date, which
+    // would hide a case created months ago that completes now). A completion date alone does not count: on cases still
+    // at Offer Issued or Exchange it is the expected date.
+    const completionsMonth = allRows.filter((r) => isCompleted(r) && inCurrentMonth(r.completion_date))
+    // Conversion = reached Completion or Post Completion, same definition
     // as Advisor Performance and Introducer Reports — not case_status,
     // which can read "won" without the case ever reaching Completion.
-    const completions = rows.filter((r) => r.pipeline_stage === 'Completion')
-    const avgDays = avgDaysToCompletion(rows)
+    const completions = rows.filter(isCompleted)
+    // The sheet's avg_days_to_completion column is empty, so fall back to created date to completion date on completed cases.
+    const avgDays = avgDaysToCompletion(rows) ?? avgDaysCreatedToCompletion(rows)
 
     const stageCounts = countBy(rows, (r) => r.pipeline_stage)
     // "Lost" is deliberately not in STAGE_ORDER itself (see the comment on
@@ -58,7 +62,7 @@ export default function Overview() {
       .slice(0, 10)
 
     return { active, completionsMonth, completions, avgDays, funnel, donut, otherSources, recent }
-  }, [rows])
+  }, [rows, allRows])
 
   const drillStage = (stage) =>
     openDrilldown(

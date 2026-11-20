@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useData } from '../context/DataContext'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
+import { AnnualReviewCalls, ErcListToYearEnd } from '../components/ClientCallLists'
 import { fmtInt, fmtDate, parseDate, displayValue, DASH } from '../lib/format'
 import {
   isOnHold,
@@ -68,7 +69,8 @@ const anomalousAdminCols = [
 ]
 
 export default function Cases() {
-  const { rows, loading, openDrilldown } = useData()
+  const { rows, allRows, loading, openDrilldown } = useData()
+  const today = useMemo(() => new Date(), [])
   const [activeQueue, setActiveQueue] = useState(QUEUES[0].id)
   const [forecastAdvisor, setForecastAdvisor] = useState('')
 
@@ -216,6 +218,10 @@ export default function Cases() {
           </div>
         </button>
       </div>
+
+      <AnnualReviewCalls allRows={allRows} now={today} />
+
+      <ErcListToYearEnd allRows={allRows} now={today} untilYear={2027} />
 
       <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
