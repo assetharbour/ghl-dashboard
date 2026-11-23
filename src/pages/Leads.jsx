@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { Info } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import DataTable from '../components/DataTable'
@@ -45,6 +47,16 @@ export default function Leads() {
 
   return (
     <div className="space-y-5">
+      <div className="card px-4 py-3 flex items-start gap-3 text-sm">
+        <Info size={15} className="text-brand-green shrink-0 mt-0.5" />
+        <span className="text-muted">
+          The date range applies to the day each lead was <strong className="text-ink">created</strong>, so this page
+          shows new leads received in the period. A lead created earlier that had an appointment booked in the period
+          will not appear here. To see appointments by the day they were booked or held, use the{' '}
+          <Link to="/sales" className="text-ink underline">Sales Team</Link> page.
+        </span>
+      </div>
+
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
         <KPICard
           label="Total Leads"
