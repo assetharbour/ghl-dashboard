@@ -6,6 +6,7 @@ import Skeleton from '../components/Skeleton'
 import { AnnualReviewCalls, ErcListToYearEnd } from '../components/ClientCallLists'
 import { fmtInt, fmtDate, parseDate, displayValue, DASH } from '../lib/format'
 import {
+  daysInState,
   isLostOrAbandoned,
   isStuck,
   isAnomalousAdmin,
@@ -43,12 +44,6 @@ const QUEUES = [
   { id: 'lost-abandoned', label: 'Lost / Abandoned', test: (r) => isLostOrAbandoned(r) },
   { id: 'stuck', label: 'Stuck / Flagged', test: (r) => isStuck(r), alert: true },
 ]
-
-function daysInState(row) {
-  const created = parseDate(row.created_date)
-  if (!created) return null
-  return Math.floor((Date.now() - created.getTime()) / 86400000)
-}
 
 function ErcChip({ date }) {
   const d = parseDate(date)
@@ -150,7 +145,8 @@ export default function Cases() {
         <p className="text-xs text-muted mt-0.5 mb-4 max-w-3xl">
           {active.id === 'lost-abandoned'
             ? 'Cases marked Lost or Abandoned in GHL, whatever stage they stopped at. Use the Status filter to see one or the other.'
-            : 'Active cases only. Lost and abandoned cases are left out of the stage totals and shown in the Lost / Abandoned tile.'}
+            : 'Active cases only. Lost and abandoned cases are left out of the stage totals and shown in the Lost / Abandoned tile.'}{' '}
+          Days in State counts from the day the case last moved stage in GHL.
         </p>
         <DataTable
           columns={[
@@ -164,6 +160,7 @@ export default function Cases() {
                 return d === null ? DASH : fmtInt(d)
               },
               sortValue: (r) => daysInState(r) ?? -1,
+              rawForCsv: (r) => daysInState(r) ?? '',
             },
             {
               key: 'pipeline_stage',
