@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchDashboardData, saveFlagStatus } from '../lib/sheets'
+import { fetchDashboardData, saveFlagNote, saveFlagStatus } from '../lib/sheets'
 import { applyFlagOverrides, pendingOverrides } from '../lib/flags'
 import { filterByDateRange, attachAppointmentStart } from '../lib/metrics'
 
@@ -65,13 +65,17 @@ export function DataProvider({ children }) {
 
   const shownFlags = useMemo(() => applyFlagOverrides(flags, flagOverrides), [flags, flagOverrides])
 
-  /** Marks a flag sorted ('resolved') or opens it again ('open'). Shows the change at once and undoes it if saving fails. */
-  const setFlagStatus = useCallback(async (flagId, status) => {
+  /**
+   * Saves one change to a flag (its status, or its note). Shows it at once, merged with any other change still waiting
+   * for the sheet, and puts the flag back as it was if saving fails.
+   */
+  const changeFlag = useCallback(async (flagId, optimistic, save) => {
     const previous = flagOverrides.get(flagId)
-    setFlagOverrides((prev) => new Map(prev).set(flagId, { status, resolved_at: status === 'resolved' ? new Date().toISOString() : '' }))
+    setFlagOverrides((prev) => new Map(prev).set(flagId, { ...prev.get(flagId), ...optimistic }))
     try {
-      const saved = await saveFlagStatus(flagId, status)
-      setFlagOverrides((prev) => new Map(prev).set(flagId, { status: saved.status, resolved_at: saved.resolved_at }))
+      const saved = await save()
+      const keep = Object.fromEntries(Object.keys(optimistic).map((k) => [k, saved[k] ?? optimistic[k]]))
+      setFlagOverrides((prev) => new Map(prev).set(flagId, { ...prev.get(flagId), ...keep }))
     } catch (e) {
       setFlagOverrides((prev) => {
         const next = new Map(prev)
@@ -82,6 +86,22 @@ export function DataProvider({ children }) {
       throw e
     }
   }, [flagOverrides])
+
+  /** Marks a flag sorted ('resolved') or opens it again ('open'). */
+  const setFlagStatus = useCallback(
+    (flagId, status) =>
+      changeFlag(flagId, { status, resolved_at: status === 'resolved' ? new Date().toISOString() : '' }, () => saveFlagStatus(flagId, status)),
+    [changeFlag]
+  )
+
+  /** Saves the note on a flag (why it was sorted); an empty note clears it. */
+  const setFlagNote = useCallback(
+    (flagId, note) => {
+      const text = note.replace(/[\r\n\t]+/g, ' ').trim()
+      return changeFlag(flagId, { note: text, noted_at: text ? new Date().toISOString() : '' }, () => saveFlagNote(flagId, text))
+    },
+    [changeFlag]
+  )
 
   const openDrilldown = useCallback((title, drillRows, extraColumns = []) => {
     setDrilldown({ title, rows: drillRows, extraColumns })
@@ -97,6 +117,7 @@ export function DataProvider({ children }) {
       appointments,
       flags: shownFlags,
       setFlagStatus,
+      setFlagNote,
       locks,
       callEvidence,
       callActivity,
@@ -119,6 +140,7 @@ export function DataProvider({ children }) {
       appointments,
       shownFlags,
       setFlagStatus,
+      setFlagNote,
       locks,
       callEvidence,
       callActivity,

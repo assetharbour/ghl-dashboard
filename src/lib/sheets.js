@@ -29,10 +29,19 @@ async function fetchViaServer() {
  * rejects with an Error whose message says why (no_write_access, flag_not_found, ...).
  */
 export async function saveFlagStatus(flagId, status) {
+  return postFlag({ flag_id: flagId, status })
+}
+
+/** Saves a manager's note on a flag (why it was sorted). An empty note clears it. Resolves with { note, noted_at }. */
+export async function saveFlagNote(flagId, note) {
+  return postFlag({ flag_id: flagId, note })
+}
+
+async function postFlag(payload) {
   const res = await fetch('/api/flags', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ flag_id: flagId, status }),
+    body: JSON.stringify(payload),
   })
   let body = null
   try {
