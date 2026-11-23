@@ -1,7 +1,7 @@
 process.env.TZ = 'Europe/London'
 
 import { describe, it, expect } from 'vitest'
-import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast, isLostOrAbandoned, daysInState } from './metrics'
+import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast, isLostOrAbandoned, daysInState, adminAssignmentReview } from './metrics'
 
 // The pipeline as GHL returns it (checked live on 22 Oct 2026), minus Lost which is deliberately not in STAGE_ORDER.
 const LIVE = [
@@ -175,5 +175,21 @@ describe('daysInState', () => {
   it('gives nothing when there is no date at all, and never a negative number', () => {
     expect(daysInState({}, now)).toBeNull()
     expect(daysInState({ last_stage_change_at: '2026-11-24T00:00:00Z' }, now)).toBe(0)
+  })
+})
+
+describe('adminAssignmentReview', () => {
+  it('counts only open cases whose admin is neither in the handover flow nor an advisor', () => {
+    const rows = [
+      { admin: 'Anita Andrews', case_status: 'open' },        // handover flow: never listed
+      { admin: 'Joe Nicholls', case_status: 'open' },         // advisor owned
+      { admin: 'Joe Nicholls', case_status: 'lost' },         // closed
+      { admin: 'Georgie Wilde', case_status: 'abandoned' },   // closed
+      { admin: 'Georgie Wilde', case_status: 'open' },        // to check
+      { admin: '', case_status: 'open' },                     // no admin: not this check
+    ]
+    const out = adminAssignmentReview(rows, ['Joe Nicholls'])
+    expect([out.review.length, out.advisorOwned.length, out.closed.length]).toEqual([1, 1, 2])
+    expect(out.review[0].admin).toBe('Georgie Wilde')
   })
 })

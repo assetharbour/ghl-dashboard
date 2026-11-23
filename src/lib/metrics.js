@@ -68,6 +68,21 @@ export const ADMIN_GROUP_HANDOVER = 'Handover Team'
 export const ADMIN_GROUP_ANOMALOUS = 'Unexpected / Needs Review'
 export const ADMIN_GROUP_ORDER = [ADMIN_GROUP_HANDOVER, ADMIN_GROUP_ANOMALOUS]
 
+// Splits the cases with an admin outside the handover flow (Andrew, 20 Nov 2026: the red alert showed 47, but many are
+// valid). Lost and abandoned cases are closed, so their admin no longer matters; a case owned by an advisor is usually
+// one the advisor created or booked directly. What is left still needs a look. `advisors` comes from sales.js (ADVISORS),
+// passed in to keep this module free of an import cycle.
+export function adminAssignmentReview(rows, advisors) {
+  const out = { review: [], advisorOwned: [], closed: [] }
+  for (const r of rows) {
+    if (!isAnomalousAdmin(r.admin)) continue
+    if (isLostOrAbandoned(r)) out.closed.push(r)
+    else if (advisors.includes(r.admin)) out.advisorOwned.push(r)
+    else out.review.push(r)
+  }
+  return out
+}
+
 export function adminGroup(adminValue) {
   return isAnomalousAdmin(adminValue) ? ADMIN_GROUP_ANOMALOUS : ADMIN_GROUP_HANDOVER
 }
