@@ -5,11 +5,12 @@ import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { AnnualReviewCalls, ErcListToYearEnd } from '../components/ClientCallLists'
 import { fmtInt, fmtDate, parseDate, displayValue, DASH } from '../lib/format'
+import { ADVISORS } from '../lib/sales'
 import {
   daysInState,
   isLostOrAbandoned,
   isStuck,
-  isAnomalousAdmin,
+  adminAssignmentReview,
   productEndDate,
   ercForecast,
   isAwaitingClientResponse,
@@ -84,9 +85,9 @@ export default function Cases() {
       .map((r) => ({ ...r, __productEnd: productEndDate(r), __soonest: parseDate(productEndDate(r)).getTime() }))
       .sort((a, b) => a.__soonest - b.__soonest)
 
-    const anomalousAdmin = rows.filter((r) => isAnomalousAdmin(r.admin))
+    const adminReview = adminAssignmentReview(rows, ADVISORS)
 
-    return { queues, erc, anomalousAdmin }
+    return { queues, erc, adminReview }
   }, [rows])
 
   const active = m.queues.find((q) => q.id === activeQueue) || m.queues[0]
@@ -200,32 +201,45 @@ export default function Cases() {
       <div className="card p-5">
         <h2 className="text-sm font-semibold text-ink mb-1">Admin Assignment: Needs Review</h2>
         <p className="text-xs text-muted mb-4 max-w-2xl">
-          These cases show an admin who isn't part of the standard handover flow: the sales team at stages 1 to 3
-          (Ava Morris-Boundy, Harry Kalsi, Hugo Sharpe), then Anita Andrews, then Ben Robertson / Lewis Flude /
-          Alison Gulliver. Likely a manual reassignment in GHL, worth reviewing with the team.
+          Open cases whose admin is outside the standard handover flow (the sales team at stages 1 to 3, then Anita Andrews or
+          Sarah Bennett, then Ben Robertson / Lewis Flude / Alison Gulliver) and is not an advisor. Worth checking with the
+          team, though there may be a good reason. Cases owned by an advisor, and lost or abandoned cases, are not counted:
+          they are listed underneath.
         </p>
         <button
           onClick={() =>
-            openDrilldown(
-              `Admin assignment needs review: ${fmtInt(m.anomalousAdmin.length)} cases`,
-              m.anomalousAdmin,
-              anomalousAdminCols
-            )
+            openDrilldown(`Admin assignment needs review: ${fmtInt(m.adminReview.review.length)} cases`, m.adminReview.review, anomalousAdminCols)
           }
           className="text-left group"
-          disabled={!m.anomalousAdmin.length}
+          disabled={!m.adminReview.review.length}
         >
           <div
             className={`text-3xl font-semibold transition-opacity ${
-              m.anomalousAdmin.length ? 'text-brand-pink group-hover:opacity-75' : 'text-ink'
+              m.adminReview.review.length ? 'text-amber-700 group-hover:opacity-75' : 'text-ink'
             }`}
           >
-            {fmtInt(m.anomalousAdmin.length)}
+            {fmtInt(m.adminReview.review.length)}
           </div>
           <div className="text-xs text-muted mt-1">
-            {m.anomalousAdmin.length ? 'cases · click to review' : 'no anomalies found'}
+            {m.adminReview.review.length ? 'cases to check · click to review' : 'nothing to check'}
           </div>
         </button>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted">
+          <span>Not counted:</span>
+          {[
+            ['owned by an advisor', m.adminReview.advisorOwned, 'Owned by an advisor'],
+            ['lost or abandoned', m.adminReview.closed, 'Lost or abandoned, admin outside the handover flow'],
+          ].map(([label, list, title]) => (
+            <button
+              key={label}
+              onClick={() => openDrilldown(`${title}: ${fmtInt(list.length)} cases`, list, [{ key: 'case_status', label: 'Status' }, ...anomalousAdminCols])}
+              disabled={!list.length}
+              className="underline decoration-dotted underline-offset-2 hover:text-ink disabled:no-underline"
+            >
+              {fmtInt(list.length)} {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <AnnualReviewCalls allRows={allRows} now={today} />
