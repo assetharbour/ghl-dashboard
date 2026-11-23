@@ -1,7 +1,7 @@
 process.env.TZ = 'Europe/London'
 
 import { describe, it, expect } from 'vitest'
-import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast, isLostOrAbandoned } from './metrics'
+import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast, isLostOrAbandoned, daysInState } from './metrics'
 
 // The pipeline as GHL returns it (checked live on 22 Oct 2026), minus Lost which is deliberately not in STAGE_ORDER.
 const LIVE = [
@@ -160,5 +160,20 @@ describe('isLostOrAbandoned', () => {
   it('treats lost and abandoned cases as closed, and open or won cases as active', () => {
     expect(['lost', 'abandoned', 'Lost', ' abandoned '].map((s) => isLostOrAbandoned({ case_status: s }))).toEqual([true, true, true, true])
     expect(['open', 'won', '', undefined].map((s) => isLostOrAbandoned({ case_status: s }))).toEqual([false, false, false, false])
+  })
+})
+
+describe('daysInState', () => {
+  const now = Date.parse('2026-11-23T12:00:00Z')
+  it('counts from the last stage change, not from when the lead was created', () => {
+    expect(daysInState({ created_date: '2026-06-11', last_stage_change_at: '2026-11-22T09:00:00Z' }, now)).toBe(1)
+  })
+  it('falls back to the created date when GHL has no stage change date', () => {
+    expect(daysInState({ created_date: '2026-11-13', last_stage_change_at: '' }, now)).toBe(10)
+    expect(daysInState({ created_date: '2026-11-13' }, now)).toBe(10)
+  })
+  it('gives nothing when there is no date at all, and never a negative number', () => {
+    expect(daysInState({}, now)).toBeNull()
+    expect(daysInState({ last_stage_change_at: '2026-11-24T00:00:00Z' }, now)).toBe(0)
   })
 })

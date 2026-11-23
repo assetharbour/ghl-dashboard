@@ -152,6 +152,16 @@ export function isOnHold(row) {
 // which overstated the active pipeline). Won cases stay in the stage totals, since case_status can say "won" too early.
 export const CLOSED_CASE_STATUSES = ['lost', 'abandoned']
 
+// Days in State = whole days since the case last moved stage, from GHL's lastStageChangeAt (synced as
+// last_stage_change_at, 23 Nov 2026). Before that it counted from the day the lead was created, so a case that reached
+// Docs Requested yesterday showed months (Andrew, 20 Nov). A case GHL holds no stage change date for falls back to its
+// created date, which is the day it entered its first stage.
+export function daysInState(row, now = Date.now()) {
+  const from = parseDate(row.last_stage_change_at) || parseDate(row.created_date)
+  if (!from) return null
+  return Math.max(0, Math.floor((now - from.getTime()) / 86400000))
+}
+
 export function isLostOrAbandoned(row) {
   return CLOSED_CASE_STATUSES.includes(String(row.case_status ?? '').trim().toLowerCase())
 }
