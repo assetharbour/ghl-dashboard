@@ -6,7 +6,7 @@ import Skeleton from '../components/Skeleton'
 import { AnnualReviewCalls, ErcListToYearEnd } from '../components/ClientCallLists'
 import { fmtInt, fmtDate, parseDate, displayValue, DASH } from '../lib/format'
 import {
-  isOnHold,
+  isLostOrAbandoned,
   isStuck,
   isAnomalousAdmin,
   productEndDate,
@@ -16,17 +16,21 @@ import {
   ADMIN_FILTER_PROPS,
 } from '../lib/metrics'
 
+// The stage queues count ACTIVE cases only: a lost or abandoned case sitting at that stage is in the Lost / Abandoned
+// queue instead (Awaiting Client Response, Finding Property and Stuck already count open cases only).
+const atStage = (stage) => (r) => r.pipeline_stage === stage && !isLostOrAbandoned(r)
+
 const QUEUES = [
-  { id: 'docs-requested', label: 'Docs Requested', test: (r) => r.pipeline_stage === 'Docs Requested' },
+  { id: 'docs-requested', label: 'Docs Requested', test: atStage('Docs Requested') },
   {
     id: 'docs-received',
     label: 'Docs Received / Full Review',
-    test: (r) => r.pipeline_stage === 'Docs Received / Full Review',
+    test: atStage('Docs Received / Full Review'),
   },
   {
     id: 'interested',
     label: 'Interested / Not Ready',
-    test: (r) => r.pipeline_stage === 'Interested / Not Ready',
+    test: atStage('Interested / Not Ready'),
   },
   {
     id: 'awaiting-client',
@@ -34,8 +38,9 @@ const QUEUES = [
     test: (r) => isAwaitingClientResponse(r),
   },
   { id: 'finding-property', label: 'Finding Property', test: (r) => isFindingPropertyCase(r) },
-  { id: 'lender', label: 'Lender Processing', test: (r) => r.pipeline_stage === 'Lender Processing' },
-  { id: 'on-hold', label: 'On Hold', test: (r) => isOnHold(r) },
+  { id: 'lender', label: 'Lender Processing', test: atStage('Lender Processing') },
+  // Replaces the On Hold tile (which was abandoned cases only): lost and abandoned together, with a Status filter.
+  { id: 'lost-abandoned', label: 'Lost / Abandoned', test: (r) => isLostOrAbandoned(r) },
   { id: 'stuck', label: 'Stuck / Flagged', test: (r) => isStuck(r), alert: true },
 ]
 
@@ -139,9 +144,14 @@ export default function Cases() {
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm font-semibold text-ink mb-4">
+        <h2 className="text-sm font-semibold text-ink">
           Queue: {active.label} ({fmtInt(active.rows.length)})
         </h2>
+        <p className="text-xs text-muted mt-0.5 mb-4 max-w-3xl">
+          {active.id === 'lost-abandoned'
+            ? 'Cases marked Lost or Abandoned in GHL, whatever stage they stopped at. Use the Status filter to see one or the other.'
+            : 'Active cases only. Lost and abandoned cases are left out of the stage totals and shown in the Lost / Abandoned tile.'}
+        </p>
         <DataTable
           columns={[
             { key: 'client_name', label: 'Client' },
@@ -160,6 +170,7 @@ export default function Cases() {
               label: 'Stage',
               render: (r) => displayValue(r.pipeline_stage),
             },
+            { key: 'case_status', label: 'Status', render: (r) => displayValue(r.case_status) },
             { key: 'lead_source', label: 'Lead Source' },
             {
               key: 'property_status',
@@ -181,6 +192,7 @@ export default function Cases() {
           filters={[
             { key: 'admin', label: 'Admin', ...ADMIN_FILTER_PROPS },
             { key: 'advisor_name', label: 'Advisor', blankLabel: '(No advisor assigned)' },
+            { key: 'case_status', label: 'Status' },
           ]}
           pageSize={25}
           exportName={`queue_${active.id}`}

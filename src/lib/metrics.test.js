@@ -1,7 +1,7 @@
 process.env.TZ = 'Europe/London'
 
 import { describe, it, expect } from 'vitest'
-import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast } from './metrics'
+import { STAGE_ORDER, stageIndex, stageAtOrBeyond, isStuck, EXPECTED_ADMINS, isAnomalousAdmin, productEndDate, isFindingPropertyCase, attachAppointmentStart, ercForecast, isLostOrAbandoned } from './metrics'
 
 // The pipeline as GHL returns it (checked live on 22 Oct 2026), minus Lost which is deliberately not in STAGE_ORDER.
 const LIVE = [
@@ -153,5 +153,12 @@ describe('isGappingCase', () => {
       expect(isGappingCase(c(s))).toBe(false)
     }
     expect(isGappingCase(c('Completion', ''))).toBe(false)
+  })
+})
+
+describe('isLostOrAbandoned', () => {
+  it('treats lost and abandoned cases as closed, and open or won cases as active', () => {
+    expect(['lost', 'abandoned', 'Lost', ' abandoned '].map((s) => isLostOrAbandoned({ case_status: s }))).toEqual([true, true, true, true])
+    expect(['open', 'won', '', undefined].map((s) => isLostOrAbandoned({ case_status: s }))).toEqual([false, false, false, false])
   })
 })

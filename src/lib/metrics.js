@@ -147,6 +147,15 @@ export function isOnHold(row) {
   return row.case_status === 'abandoned'
 }
 
+// Lost and abandoned cases are closed, so they are left out of the active stage totals on Case Management and shown in
+// their own Lost / Abandoned tile instead (Andrew, 20 Nov 2026: 31 of the 76 Docs Requested cases were lost or abandoned,
+// which overstated the active pipeline). Won cases stay in the stage totals, since case_status can say "won" too early.
+export const CLOSED_CASE_STATUSES = ['lost', 'abandoned']
+
+export function isLostOrAbandoned(row) {
+  return CLOSED_CASE_STATUSES.includes(String(row.case_status ?? '').trim().toLowerCase())
+}
+
 // Proxy for "Awaiting Client Response" — no literal GHL field, tag, or task
 // matches this concept. The task's own suggested proxy
 // (docs_status=='Partial' AND docs_chase_attempt_count>=1) yields zero live
