@@ -57,20 +57,38 @@ export const statusText = (s) => STATUS_TEXT[s] || s || '—'
 
 /**
  * Flags with the changes made in this browser laid over them. A change shows at once, before the sheet data the
- * dashboard reads (cached for up to 30 seconds) has caught up. overrides: Map flag_id -> { status, resolved_at }.
+ * dashboard reads (cached for up to 30 seconds) has caught up. overrides: Map flag_id -> { status?, resolved_at?, note?,
+ * noted_at? }; only the parts that were changed are present.
  */
 export function applyFlagOverrides(flags, overrides) {
   if (!overrides?.size) return flags
   return flags.map((f) => {
     const o = overrides.get(f.flag_id)
-    return o ? { ...f, status: o.status, resolved_at: o.resolved_at ?? f.resolved_at } : f
+    if (!o) return f
+    const out = { ...f }
+    if (o.status !== undefined) Object.assign(out, { status: o.status, resolved_at: o.resolved_at ?? f.resolved_at })
+    if (o.note !== undefined) Object.assign(out, { note: o.note, noted_at: o.noted_at ?? f.noted_at })
+    return out
   })
 }
 
-/** The overrides the sheet data has not caught up with yet (once a flag reads the same status, its override goes). */
+/** The overrides the sheet data has not caught up with yet (once a flag reads the same status and note, its override goes). */
 export function pendingOverrides(flags, overrides) {
   if (!overrides?.size) return overrides
-  const status = new Map(flags.map((f) => [f.flag_id, f.status]))
-  const left = new Map([...overrides].filter(([id, o]) => status.has(id) && status.get(id) !== o.status))
+  const byId = new Map(flags.map((f) => [f.flag_id, f]))
+  const behind = (f, o) => (o.status !== undefined && f.status !== o.status) || (o.note !== undefined && (f.note || '') !== o.note)
+  const left = new Map([...overrides].filter(([id, o]) => byId.has(id) && behind(byId.get(id), o)))
   return left.size === overrides.size ? overrides : left
+}
+
+/**
+ * Who a flag is about, so a manager can filter by person (Andrew, 20 Nov 2026). Owner = the lead's Admin (contact
+ * owner). Advisor = the advisor on the flag's appointment when it has one (the calendar is what the call flags were
+ * checked against), otherwise the lead's advisor-name field.
+ */
+export function flagPeople(lead, appointment) {
+  return {
+    owner: lead?.admin || '',
+    advisor: appointment?.advisor || lead?.advisor_name || '',
+  }
 }

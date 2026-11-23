@@ -1,21 +1,24 @@
 import { GoogleAuth } from 'google-auth-library'
 import { isAuthorized } from './_auth.js'
 
-// Marks one flag as sorted (or opens it again) by writing its status into the Flags tab of the private sheet.
+// Marks one flag as sorted (or opens it again), and/or saves a manager's note on it, in the Flags tab of the private sheet.
 //
-// POST /api/flags  { "flag_id": "...", "status": "resolved" | "open" }
+// POST /api/flags  { "flag_id": "...", "status"?: "resolved" | "open", "note"?: "why it was sorted" }   (at least one of the two)
 //
 // The Flags tab is written by the sync's field audit (ghl-reporting-sync/app/audit_runner.py). The sync only ever
-// APPENDS flags whose flag_id it has not seen, and its call-evidence refresh only rewrites flags that are still
-// "open", so a status set here stays as it is. Two columns are added at the END of the tab (the sync's header
-// contract allows extra trailing columns): resolved_at (when it was marked) and resolved_via ("dashboard").
-// Only this endpoint writes to the sheet, and only those three cells of one existing row.
+// APPENDS flags whose flag_id it has not seen, and when it refreshes a flag it rewrites only its own columns (A to K,
+// app/audit_store.py TabStore.upsert), so anything set here stays as it is. Our columns are added at the END of the tab
+// (the sync's header contract allows extra trailing columns): resolved_at (when it was marked) and resolved_via
+// ("dashboard") for a status, note and noted_at (when the note was last saved) for a note. Each column is only added
+// the first time it is needed. Only this endpoint writes to the sheet, and only those cells of one existing row.
 
 const SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 const TAB = 'Flags'
 const STATUSES = new Set(['resolved', 'open'])
 const FLAG_ID = /^[A-Za-z0-9_-]{1,64}$/ // the sync's ids are 16 hex characters
-const EXTRA = ['resolved_at', 'resolved_via']
+const STATUS_EXTRA = ['resolved_at', 'resolved_via']
+const NOTE_EXTRA = ['note', 'noted_at']
+export const NOTE_MAX = 500
 
 let auth
 
@@ -76,7 +79,14 @@ export default async function handler(req, res) {
   const body = readBody(req)
   const flagId = typeof body?.flag_id === 'string' ? body.flag_id : ''
   const status = body?.status
-  if (!FLAG_ID.test(flagId) || !STATUSES.has(status)) return res.status(400).json({ error: 'bad_request' })
+  const hasStatus = status !== undefined
+  const hasNote = body?.note !== undefined
+  if (!FLAG_ID.test(flagId) || (!hasStatus && !hasNote)) return res.status(400).json({ error: 'bad_request' })
+  if (hasStatus && !STATUSES.has(status)) return res.status(400).json({ error: 'bad_request' })
+  if (hasNote && typeof body.note !== 'string') return res.status(400).json({ error: 'bad_request' })
+  // One line of plain text: line breaks become spaces so the sheet stays readable.
+  const note = hasNote ? body.note.replace(/[\r\n\t]+/g, ' ').trim() : ''
+  if (note.length > NOTE_MAX) return res.status(400).json({ error: 'note_too_long' })
 
   const sheetId = process.env.GOOGLE_SHEET_ID
   const base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values`
@@ -95,7 +105,8 @@ export default async function handler(req, res) {
     const data = []
     const cols = {}
     let width = header.length
-    for (const name of EXTRA) {
+    const needed = [...(hasStatus ? STATUS_EXTRA : []), ...(hasNote ? NOTE_EXTRA : [])]
+    for (const name of needed) {
       let i = header.indexOf(name)
       if (i === -1) {
         i = width
@@ -107,18 +118,28 @@ export default async function handler(req, res) {
     // The sync created the tab exactly as wide as its own columns, and Google refuses a write outside the grid
     // ("exceeds grid limits"), so the first time the extra columns are needed the tab is widened.
     if (width > header.length) await ensureColumns(sheetId, width)
-    const resolved = status === 'resolved'
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
-    data.push({ range: `${TAB}!${columnLetter(statusCol)}${rowNumber}`, values: [[status]] })
-    data.push({ range: `${TAB}!${columnLetter(cols.resolved_at)}${rowNumber}`, values: [[resolved ? now : '']] })
-    data.push({ range: `${TAB}!${columnLetter(cols.resolved_via)}${rowNumber}`, values: [[resolved ? 'dashboard' : '']] })
+    const cell = (col, value) => data.push({ range: `${TAB}!${columnLetter(col)}${rowNumber}`, values: [[value]] })
+    const result = { flag_id: flagId }
+    if (hasStatus) {
+      const resolved = status === 'resolved'
+      cell(statusCol, status)
+      cell(cols.resolved_at, resolved ? now : '')
+      cell(cols.resolved_via, resolved ? 'dashboard' : '')
+      Object.assign(result, { status, resolved_at: resolved ? now : '' })
+    }
+    if (hasNote) {
+      cell(cols.note, note)
+      cell(cols.noted_at, note ? now : '')
+      Object.assign(result, { note, noted_at: note ? now : '' })
+    }
 
     await google().request({
       url: `${base}:batchUpdate`,
       method: 'POST',
       data: { valueInputOption: 'RAW', data },
     })
-    return res.status(200).json({ flag_id: flagId, status, resolved_at: resolved ? now : '' })
+    return res.status(200).json(result)
   } catch (err) {
     const code = err?.response?.status
     console.error('flag update failed:', code || '', err?.message || err)

@@ -1,30 +1,37 @@
 import { useMemo, useState } from 'react'
-import { Check, Info, RotateCcw } from 'lucide-react'
+import { Check, Info, Pencil, RotateCcw } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import KPICard from '../components/KPICard'
 import DataTable from '../components/DataTable'
 import Skeleton from '../components/Skeleton'
 import { DASH, fmtDate, fmtInt, parseDate } from '../lib/format'
 import { rangeBounds } from '../lib/metrics'
-import { FIELD_LABEL, FLAG_TYPES, flagValues, statusText, typeLabel } from '../lib/flags'
+import { FIELD_LABEL, FLAG_TYPES, flagPeople, flagValues, statusText, typeLabel } from '../lib/flags'
 
+const NOTE_MAX = 500 // the same limit as /api/flags
+
+const saveErrorText = (e) =>
+  e.message === 'no_write_access'
+    ? 'The dashboard cannot save to the sheet yet: its Google service account needs edit access to the sheet. Nothing was changed.'
+    : e.message === 'note_too_long'
+      ? `That note is too long. Please keep it under ${NOTE_MAX} characters.`
+      : 'That change could not be saved, so the flag is back as it was. Please try again.'
 
 export default function Flags() {
-  const { loading, flags, setFlagStatus, allRows, appointments, dateRange, customRange, openDrilldown } = useData()
+  const { loading, flags, setFlagStatus, setFlagNote, allRows, appointments, dateRange, customRange, openDrilldown } = useData()
   const [saving, setSaving] = useState(() => new Set()) // flag ids being saved
   const [saveError, setSaveError] = useState(null)
+  const [editing, setEditing] = useState(null) // { id, draft } while a note is being written
 
-  const mark = async (flagId, status) => {
+  const run = async (flagId, action) => {
     setSaveError(null)
     setSaving((prev) => new Set(prev).add(flagId))
     try {
-      await setFlagStatus(flagId, status)
+      await action()
+      return true
     } catch (e) {
-      setSaveError(
-        e.message === 'no_write_access'
-          ? 'The dashboard cannot save to the sheet yet: its Google service account needs edit access to the sheet. Nothing was changed.'
-          : 'That change could not be saved, so the flag is back as it was. Please try again.'
-      )
+      setSaveError(saveErrorText(e))
+      return false
     } finally {
       setSaving((prev) => {
         const next = new Set(prev)
@@ -33,6 +40,16 @@ export default function Flags() {
       })
     }
   }
+
+  const mark = (flagId, status) => run(flagId, () => setFlagStatus(flagId, status))
+
+  const saveNote = async () => {
+    if (!editing) return
+    const { id, draft } = editing
+    if (await run(id, () => setFlagNote(id, draft))) setEditing(null)
+  }
+
+  const appointmentById = useMemo(() => new Map(appointments.filter((a) => a.appointment_id).map((a) => [a.appointment_id, a])), [appointments])
 
   const leadByContact = useMemo(() => {
     const map = new Map()
@@ -56,9 +73,13 @@ export default function Flags() {
         const lead = leadByContact.get(f.contact_id) || {}
         const detected = parseDate(f.detected_at)
         const shown = flagValues(f)
+        const people = flagPeople(lead, appointmentById.get(f.appointment_id))
         return {
           ...lead,
           ...f,
+          owner: people.owner,
+          advisor: people.advisor,
+          note: f.note || '',
           was: shown.was,
           now: shown.now,
           official: shown.official,
@@ -72,7 +93,7 @@ export default function Flags() {
         }
       })
       .sort((a, b) => String(b.detected_at).localeCompare(String(a.detected_at)))
-  }, [flags, leadByContact, nameByContact, dateRange, customRange])
+  }, [flags, leadByContact, nameByContact, appointmentById, dateRange, customRange])
 
   const open = rows.filter((r) => r.status === 'open')
   const count = (group) => open.filter((r) => r.group === group)
@@ -80,12 +101,15 @@ export default function Flags() {
   const COLUMNS = [
     { key: 'detected_on', label: 'Detected' },
     { key: 'type_label', label: 'Flag' },
+    { key: 'owner', label: 'Owner' },
+    { key: 'advisor', label: 'Advisor' },
     { key: 'was', label: 'Was' },
     { key: 'now', label: 'Now' },
     { key: 'official', label: 'Official (locked or calendar)' },
     { key: 'detail', label: 'What happened' },
+    { key: 'note', label: 'Note' },
   ]
-  const drill = (title, list) => openDrilldown(`${title}: ${fmtInt(list.length)}`, list, COLUMNS)
+  const drill =(title, list) => openDrilldown(`${title}: ${fmtInt(list.length)}`, list, COLUMNS)
 
   const cards = [
     ['Open flags', open, 'Needs a manager to look'],
@@ -121,8 +145,9 @@ export default function Flags() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-ink">All flags</h2>
           <p className="text-xs text-muted mt-0.5 mb-4 max-w-3xl">
-            Once a flag has been looked at and sorted, click Mark sorted. It is saved to the sheet, so everyone sees it, and the open counts above change
-            straight away. Undo opens it again.
+            Owner is the lead&apos;s Admin; Advisor is the advisor on the flagged appointment (or the case&apos;s advisor). Use the filters to see one
+            person&apos;s flags. Once a flag has been looked at, add a note saying what was found (for example, the client rang back on another number),
+            then click Mark sorted. Both are saved to the sheet, so everyone sees them, and the open counts above change straight away. Undo opens it again.
           </p>
           {saveError && (
             <p role="alert" className="mb-3 rounded-lg border border-brand-pink/40 bg-brand-pink/5 px-3 py-2 text-sm text-brand-pink">
@@ -140,16 +165,85 @@ export default function Flags() {
               filters={[
                 { key: 'type_label', label: 'Flag' },
                 { key: 'status_label', label: 'Status' },
+                { key: 'owner', label: 'Owner', blankLabel: '(No owner)' },
+                { key: 'advisor', label: 'Advisor', blankLabel: '(No advisor)' },
               ]}
               columns={[
                 { key: 'detected_on', label: 'Detected', sortValue: (r) => r.detected_at },
                 { key: 'type_label', label: 'Flag' },
                 { key: 'client_name', label: 'Client' },
+                { key: 'owner', label: 'Owner', render: (r) => r.owner || DASH },
+                { key: 'advisor', label: 'Advisor', render: (r) => r.advisor || DASH },
                 { key: 'field_label', label: 'Field' },
                 { key: 'was', label: 'Was' },
                 { key: 'now', label: 'Now' },
                 { key: 'official', label: 'Official (locked or calendar)' },
                 { key: 'detail', label: 'What happened' },
+                {
+                  key: 'note',
+                  label: 'Note',
+                  sortable: false,
+                  rawForCsv: (r) => r.note,
+                  render: (r) => {
+                    const busy = saving.has(r.flag_id)
+                    if (editing?.id === r.flag_id) {
+                      return (
+                        <form
+                          className="flex min-w-[220px] flex-col gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            saveNote()
+                          }}
+                        >
+                          <textarea
+                            autoFocus
+                            rows={2}
+                            maxLength={NOTE_MAX}
+                            value={editing.draft}
+                            onChange={(e) => setEditing({ id: r.flag_id, draft: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditing(null)
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                saveNote()
+                              }
+                            }}
+                            placeholder="What was found, e.g. client rang back on his mobile"
+                            aria-label={`Note for: ${r.type_label}, ${r.client_name}`}
+                            className="w-full rounded-md border border-line bg-card px-2 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-green"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="submit"
+                              disabled={busy}
+                              className="rounded-md bg-brand-green px-2 py-0.5 text-xs font-medium text-white disabled:opacity-50"
+                            >
+                              {busy ? 'Saving' : 'Save'}
+                            </button>
+                            <button type="button" onClick={() => setEditing(null)} className="text-xs text-muted hover:text-ink">
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )
+                    }
+                    return (
+                      <div className="flex min-w-[160px] items-start gap-1.5">
+                        {r.note && <span className="text-xs text-ink">{r.note}</span>}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setEditing({ id: r.flag_id, draft: r.note })}
+                          title={r.note ? 'Edit the note' : 'Add a note'}
+                          aria-label={`${r.note ? 'Edit note' : 'Add note'}: ${r.type_label}, ${r.client_name}`}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-page hover:text-ink disabled:opacity-50"
+                        >
+                          <Pencil size={12} /> {r.note ? '' : 'Add note'}
+                        </button>
+                      </div>
+                    )
+                  },
+                },
                 {
                   key: 'status_label',
                   label: 'Status',

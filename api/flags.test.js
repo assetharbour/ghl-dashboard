@@ -141,6 +141,57 @@ describe('writing the status', () => {
   })
 })
 
+describe('saving a note', () => {
+  it('adds the note and noted_at columns the first time and writes only those two cells', async () => {
+    const r = await call({ flag_id: 'f2', note: 'Client rang back on his mobile, call was 25 min' })
+    expect(r.code).toBe(200)
+    expect(r.body).toMatchObject({ flag_id: 'f2', note: 'Client rang back on his mobile, call was 25 min' })
+    expect(r.body.status).toBeUndefined() // the status is left alone
+    expect(writes().data).toEqual([
+      { range: 'Flags!L1', values: [['note']] },
+      { range: 'Flags!M1', values: [['noted_at']] },
+      { range: 'Flags!L3', values: [['Client rang back on his mobile, call was 25 min']] },
+      { range: 'Flags!M3', values: [[r.body.noted_at]] },
+    ])
+    expect(widen()).toEqual({ requests: [{ appendDimension: { sheetId: 77, dimension: 'COLUMNS', length: 2 } }] })
+  })
+
+  it('saves a note and marks the flag sorted in one write, after the existing status columns', async () => {
+    flagsTab[0] = [...HEADER, 'resolved_at', 'resolved_via']
+    columnCount = 13
+    const r = await call({ flag_id: 'f1', status: 'resolved', note: 'Checked with Ben' })
+    expect(r.code).toBe(200)
+    expect(writes().data).toEqual([
+      { range: 'Flags!N1', values: [['note']] },
+      { range: 'Flags!O1', values: [['noted_at']] },
+      { range: 'Flags!K2', values: [['resolved']] },
+      { range: 'Flags!L2', values: [[r.body.resolved_at]] },
+      { range: 'Flags!M2', values: [['dashboard']] },
+      { range: 'Flags!N2', values: [['Checked with Ben']] },
+      { range: 'Flags!O2', values: [[r.body.noted_at]] },
+    ])
+  })
+
+  it('clears a note, and keeps it on one line', async () => {
+    flagsTab[0] = [...HEADER, 'note', 'noted_at']
+    columnCount = 13
+    expect((await call({ flag_id: 'f1', note: '  ' })).body).toMatchObject({ note: '', noted_at: '' })
+    calls = []
+    expect((await call({ flag_id: 'f1', note: 'line one\nline two' })).body.note).toBe('line one line two')
+  })
+
+  it.each([
+    ['a note that is not text', { flag_id: 'f1', note: 42 }, 'bad_request'],
+    ['a bad status next to a note', { flag_id: 'f1', status: 'deleted', note: 'x' }, 'bad_request'],
+    ['a note that is too long', { flag_id: 'f1', note: 'x'.repeat(501) }, 'note_too_long'],
+  ])('rejects %s and writes nothing', async (_name, body, error) => {
+    const r = await call(body)
+    expect(r.code).toBe(400)
+    expect(r.body).toEqual({ error })
+    expect(calls).toEqual([])
+  })
+})
+
 describe('columnLetter', () => {
   it('counts like a spreadsheet', async () => {
     const { columnLetter } = await import('./flags.js')
