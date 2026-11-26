@@ -335,15 +335,21 @@ export function weeklyBookings(appointments, personOf, { start = null, end = nul
   return { weeks: [...byWeek.values()], people }
 }
 
-/** The coming Monday-Friday: appointments (not cancelled / deleted) per day and per advisor. */
-export function forwardWeek(appointments, now) {
-  const monday = startOfDay(now)
-  monday.setDate(monday.getDate() + (((8 - monday.getDay()) % 7) || 7))    // the next Monday after today
+/**
+ * Monday-Friday from `monday`: appointments (not cancelled / invalid / deleted) per day, by start time.
+ * Each day also says whether it is today or already over, relative to `now`.
+ */
+function workingWeekFrom(monday, appointments, now) {
+  const today = isoDay(startOfDay(now))
   const days = []
   for (let i = 0; i < 5; i++) {
     const day = new Date(monday)
     day.setDate(monday.getDate() + i)
-    days.push({ date: day, key: isoDay(day), label: day.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }), appointments: [] })
+    const key = isoDay(day)
+    days.push({
+      date: day, key, label: day.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }),
+      isToday: key === today, isPast: key < today, appointments: [],
+    })
   }
   const byKey = new Map(days.map((d) => [d.key, d]))
   for (const a of appointments) {
@@ -352,7 +358,23 @@ export function forwardWeek(appointments, now) {
     const day = start && byKey.get(isoDay(start))
     if (day) day.appointments.push(a)
   }
+  for (const d of days) d.appointments.sort((x, y) => String(x.start_time).localeCompare(String(y.start_time)))
   return { monday, days }
+}
+
+/** The coming Monday-Friday (the Monday after today, so from a Monday it is the week after). */
+export function forwardWeek(appointments, now) {
+  const monday = startOfDay(now)
+  monday.setDate(monday.getDate() + (((8 - monday.getDay()) % 7) || 7))    // the next Monday after today
+  return workingWeekFrom(monday, appointments, now)
+}
+
+/**
+ * The current Monday-Friday, the week containing today (Monday-start, the same week as the "This week" date range).
+ * On a Saturday or Sunday that is the working week just gone; the forward view already shows the coming one.
+ */
+export function currentWeek(appointments, now) {
+  return workingWeekFrom(weekStart(now), appointments, now)
 }
 
 // ---------------------------------------------------------------- Created By

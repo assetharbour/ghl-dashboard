@@ -17,6 +17,7 @@ import {
   contactInfoFromLeads,
   createdByReport,
   creditedAppointments,
+  currentWeek,
   factFindStatuses,
   FF_STATUS_ORDER,
   forwardWeek,
@@ -159,6 +160,7 @@ export default function Sales() {
   )
   const distribution = useMemo(() => advisorDistribution(scoped, ADVISORS, { start, end, dateField }), [scoped, start, end, dateField])
   const ahead = useMemo(() => forwardWeek(scoped, now), [scoped, now])
+  const thisWeek = useMemo(() => currentWeek(scoped, now), [scoped, now])
   const months = useMemo(() => lastMonths(now, 6), [now])
   const ffByAdvisor = useMemo(() => fullFactFindsByMonth(scoped, contacts, now, (a) => a.advisor || UNKNOWN, months), [scoped, contacts, now, months])
   const ffByBooker = useMemo(() => fullFactFindsByMonth(scoped, contacts, now, bookerOf, months), [scoped, contacts, now, months])
@@ -377,48 +379,15 @@ export default function Sales() {
         )}
       </div>
 
-      <div className="card p-5">
-        <h2 className="text-sm font-semibold text-ink">Next working week</h2>
-        <p className="text-xs text-muted mt-0.5 mb-4">
-          Appointments for {fmtDate(ahead.days[0].date)} to {fmtDate(ahead.days[4].date)} (cancelled ones excluded). Click a day to see them.
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {ahead.days.map((day) => {
-            const byAdvisor = {}
-            for (const a of day.appointments) byAdvisor[a.advisor || UNKNOWN] = (byAdvisor[a.advisor || UNKNOWN] || 0) + 1
-            const open = () => {
-              const picked = day.appointments.map((a) => {
-                const lead = leadByContact.get(a.contact_id) || {}
-                const starts = parseDate(a.start_time)
-                return {
-                  ...lead, ...a, client_name: lead.client_name || a.contact_name || DASH, advisor_name: a.advisor,
-                  booker: bookerOf(a), appointment_on: starts ? starts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : DASH,
-                  status_label: STATUS_LABEL[a.status] || a.status || DASH,
-                }
-              })
-              openDrilldown(`${day.label}: ${fmtInt(picked.length)} appointments`, picked, [
-                { key: 'appointment_on', label: 'Time' },
-                { key: 'booker', label: 'Booked by' },
-                { key: 'status_label', label: 'Status' },
-              ])
-            }
-            return (
-              <button key={day.key} onClick={open} className="text-left border border-line rounded-lg p-3 hover:border-brand-green/50 transition-colors">
-                <div className="text-xs text-muted">{day.label}</div>
-                <div className="text-2xl font-semibold text-ink mt-0.5">{fmtInt(day.appointments.length)}</div>
-                <div className="mt-1 space-y-0.5">
-                  {Object.entries(byAdvisor).map(([name, n]) => (
-                    <div key={name} className="text-[11px] text-muted flex justify-between">
-                      <span className="truncate pr-2">{name}</span>
-                      <span>{n}</span>
-                    </div>
-                  ))}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <WeekStrip
+        title="This week"
+        note="Earlier days show how each appointment was marked; today is highlighted."
+        week={thisWeek}
+        leadByContact={leadByContact}
+        openDrilldown={openDrilldown}
+      />
+
+      <WeekStrip title="Next working week" week={ahead} leadByContact={leadByContact} openDrilldown={openDrilldown} />
 
       <div className="card p-5">
         <h2 className="text-sm font-semibold text-ink">Advisor calls against appointments</h2>
@@ -624,6 +593,76 @@ function MonthMatrix({ title, subtitle, months, rows, loading, name, label }) {
         </div>
       )}
       {!rows.length && <p className="text-xs text-muted mt-2">No full fact finds recorded in these months yet.</p>}
+    </div>
+  )
+}
+
+/**
+ * One Monday-Friday strip of appointment counts (cancelled ones excluded), split by advisor. Click a day for the list.
+ * `week` comes from currentWeek() or forwardWeek() in lib/sales.
+ */
+function WeekStrip({ title, note, week, leadByContact, openDrilldown }) {
+  const first = week.days[0].date
+  const last = week.days[4].date
+  const total = week.days.reduce((n, d) => n + d.appointments.length, 0)
+  return (
+    <div className="card p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        <span className="text-xs text-muted">{fmtInt(total)} in total</span>
+      </div>
+      <p className="text-xs text-muted mt-0.5 mb-4">
+        Appointments for {fmtDate(first)} to {fmtDate(last)} (cancelled ones excluded). {note ? `${note} ` : ''}Click a day to see them.
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {week.days.map((day) => {
+          const byAdvisor = {}
+          for (const a of day.appointments) byAdvisor[a.advisor || UNKNOWN] = (byAdvisor[a.advisor || UNKNOWN] || 0) + 1
+          const open = () => {
+            const picked = day.appointments.map((a) => {
+              const lead = leadByContact.get(a.contact_id) || {}
+              const starts = parseDate(a.start_time)
+              return {
+                ...lead, ...a, client_name: lead.client_name || a.contact_name || DASH, advisor_name: a.advisor,
+                booker: bookerOf(a), appointment_on: starts ? starts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : DASH,
+                status_label: STATUS_LABEL[a.status] || a.status || DASH,
+              }
+            })
+            openDrilldown(`${day.label}: ${fmtInt(picked.length)} appointments`, picked, [
+              { key: 'appointment_on', label: 'Time' },
+              { key: 'booker', label: 'Booked by' },
+              { key: 'status_label', label: 'Status' },
+            ])
+          }
+          const tone = day.isToday
+            ? 'border-brand-green bg-brand-green/5'
+            : day.isPast
+              ? 'border-line bg-page/60'
+              : 'border-line'
+          return (
+            <button
+              key={day.key}
+              onClick={open}
+              aria-current={day.isToday ? 'date' : undefined}
+              className={`flex flex-col justify-start text-left border rounded-lg p-3 hover:border-brand-green/50 transition-colors ${tone}`}
+            >
+              <div className="text-xs text-muted flex items-center justify-between gap-2">
+                <span>{day.label}</span>
+                {day.isToday && <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-green">Today</span>}
+              </div>
+              <div className={`text-2xl font-semibold mt-0.5 ${day.isPast ? 'text-muted' : 'text-ink'}`}>{fmtInt(day.appointments.length)}</div>
+              <div className="mt-1 space-y-0.5">
+                {Object.entries(byAdvisor).map(([name, n]) => (
+                  <div key={name} className="text-[11px] text-muted flex justify-between">
+                    <span className="truncate pr-2">{name}</span>
+                    <span>{n}</span>
+                  </div>
+                ))}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

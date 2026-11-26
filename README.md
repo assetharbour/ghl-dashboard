@@ -48,7 +48,8 @@ and `api/leads.js` re-checks the same credentials itself.
 
 * `/sales` (Sales Team): appointments booked, showed, no-shows, cancelled, rebooked, full fact finds, completed, and the two
   conversion rates per sales rep (booked -> full fact find, booked -> completed), per advisor, per week, appointments per advisor,
-  the next working week, full fact finds by month, leads added per locked Created By, and the appointment list. The date range
+  this week and the next working week (Monday-Friday day cards by advisor, cancelled ones excluded; on "This week" today is
+  highlighted and earlier days stay listed with how they were marked; at the weekend "This week" is the week just gone), full fact finds by month, leads added per locked Created By, and the appointment list. The date range
   (top right) applies to the day each appointment was **booked**. Weekly and monthly presets (This week, Last week, This month,
   Last month) were added to the shared date range and work on every page.
 * `/flags` (Flags): changes and mismatches found by the sync's field audit (Created By / Booked By changed or cleared, Booked By
