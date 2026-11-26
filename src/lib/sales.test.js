@@ -5,7 +5,7 @@ process.env.TZ = 'Europe/London'
 import { describe, it, expect } from 'vitest'
 import {
   buildSalesTable, sumRows, advisorDistribution, contactInfoFromLeads, createdByReport,
-  isFullFactFind, namesMatch, weekStart, weeklyBookings, forwardWeek, SALES_TEAM, fullFactFindsByMonth, lastMonths, creditedAppointments,
+  isFullFactFind, namesMatch, weekStart, weeklyBookings, forwardWeek, currentWeek, SALES_TEAM, fullFactFindsByMonth, lastMonths, creditedAppointments,
   factFindStatuses, outcomeLabel, FF_STATUS,
 } from './sales'
 import { rangeBounds, filterByDateRange } from './metrics'
@@ -228,6 +228,41 @@ describe('weeks and the forward view', () => {
     expect(forwardWeek([], new Date('2026-10-25T09:00:00Z')).monday.getDate()).toBe(26)
     // and from a Monday it is the Monday after
     expect(forwardWeek([], new Date('2026-10-26T09:00:00Z')).monday.getDate()).toBe(2)
+  })
+
+  it('shows the current Monday-Friday, with today marked and earlier days over', () => {
+    const appts = [
+      appt('1', 'c1', { start_time: '2026-10-19T10:00:00Z', status: 'showed' }), // Mon, already happened: still listed
+      appt('2', 'c2', { start_time: '2026-10-20T10:00:00Z', status: 'noshow' }), // Tue, marked no-show: still listed
+      appt('3', 'c3', { start_time: '2026-10-22T15:00:00Z', status: 'confirmed' }), // Thu (today), later
+      appt('4', 'c4', { start_time: '2026-10-22T09:00:00Z', status: 'confirmed' }), // Thu (today), earlier
+      appt('5', 'c5', { start_time: '2026-10-23T09:00:00Z', status: 'cancelled' }), // Fri, cancelled: left out
+      appt('6', 'c6', { start_time: '2026-10-23T11:00:00Z', status: 'invalid' }), // Fri, invalid: left out
+      appt('7', 'c7', { start_time: '2026-10-21T09:00:00Z', status: 'confirmed', deleted: 'TRUE' }), // Wed, deleted: left out
+      appt('8', 'c8', { start_time: '2026-10-26T09:00:00Z', status: 'confirmed' }), // next Monday: not this week
+      appt('9', 'c9', { start_time: '2026-10-24T09:00:00Z', status: 'confirmed' }), // Saturday: not a working day
+    ]
+    const { monday, days } = currentWeek(appts, NOW) // Thursday 22 Oct -> Monday 19 Oct
+    expect(monday.getDate()).toBe(19)
+    expect(days.map((d) => d.date.getDate())).toEqual([19, 20, 21, 22, 23])
+    expect(days.map((d) => d.appointments.length)).toEqual([1, 1, 0, 2, 0])
+    expect(days[3].appointments.map((a) => a.appointment_id)).toEqual(['4', '3']) // in time order
+    expect(days.map((d) => d.isToday)).toEqual([false, false, false, true, false])
+    expect(days.map((d) => d.isPast)).toEqual([true, true, true, false, false])
+  })
+
+  it('treats Monday as the start of this week and the weekend as the week just gone', () => {
+    expect(currentWeek([], new Date('2026-10-19T09:00:00Z')).monday.getDate()).toBe(19) // Monday itself
+    expect(currentWeek([], new Date('2026-10-23T09:00:00Z')).monday.getDate()).toBe(19) // Friday
+    const sunday = currentWeek([], new Date('2026-10-25T09:00:00Z'))
+    expect(sunday.monday.getDate()).toBe(19) // Sunday: the working week just gone
+    expect(sunday.days.every((d) => d.isPast)).toBe(true)
+    // the two views never overlap: from any day, next week starts on the Monday after this week's
+    for (const d of ['2026-10-19', '2026-10-22', '2026-10-23', '2026-10-25']) {
+      const now = new Date(`${d}T09:00:00Z`)
+      const gap = forwardWeek([], now).monday - currentWeek([], now).monday
+      expect(Math.round(gap / 86400000)).toBe(7)
+    }
   })
 })
 
